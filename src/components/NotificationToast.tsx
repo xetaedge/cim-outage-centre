@@ -24,6 +24,8 @@ export const NotificationToastContainer: React.FC = () => {
               className={`w-1 absolute left-0 top-0 bottom-0 ${
                 toast.type === 'p1'
                   ? 'bg-red-500'
+                  : toast.type === 'error'
+                  ? 'bg-red-400'
                   : toast.type === 'bridge'
                   ? 'bg-purple-500'
                   : toast.type === 'recovery'

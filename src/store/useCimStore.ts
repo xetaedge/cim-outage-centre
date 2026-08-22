@@ -6,7 +6,7 @@ export interface ToastNotification {
   id: string;
   title: string;
   message: string;
-  type: 'p1' | 'update' | 'bridge' | 'recovery' | 'closed';
+  type: 'p1' | 'update' | 'bridge' | 'recovery' | 'closed' | 'error';
   time: string;
 }
 
