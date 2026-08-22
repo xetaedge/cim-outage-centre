@@ -8,13 +8,13 @@ export interface GeminiConfig {
 export const DEFAULT_GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 export const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
 
-// Available model fallback priority list
+// Available model fallback priority list (high availability)
 export const GEMINI_MODEL_FALLBACKS = [
-  'gemini-flash-lite-latest',
-  'gemini-3.1-flash-lite',
-  'gemini-3.1-flash-lite-preview',
-  'gemini-flash-latest',
   'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-flash-lite-latest',
   'gemini-1.5-pro',
 ];
 
@@ -131,7 +131,10 @@ export async function callGeminiAPI(params: {
 
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': apiKey,
+        },
         body: JSON.stringify(body),
       });
 
@@ -157,12 +160,11 @@ export async function callGeminiAPI(params: {
         return { text: rawText, modelUsed: model, parsedJson };
       }
 
-      // If temporary overload or rate limit or not found, wait and try next model
-      if (res.status === 503 || res.status === 429 || res.status === 404) {
+      // If temporary overload or rate limit or not found, try next model in cascade
+      if (res.status === 503 || res.status === 429 || res.status === 404 || res.status === 500) {
         const errText = await res.text();
-        console.warn(`[Gemini API] Model ${model} returned ${res.status}: ${errText}. Trying next fallback...`);
-        lastError = new Error(`Gemini API error (${res.status}) on model ${model}: ${errText}`);
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        console.warn(`[Gemini API] Model ${model} returned ${res.status}: ${errText.substring(0, 120)}. Trying next fallback model...`);
+        lastError = new Error(`Gemini API (${res.status}) on ${model}: ${errText}`);
         continue;
       }
 
@@ -170,7 +172,7 @@ export async function callGeminiAPI(params: {
       throw new Error(`Gemini API error (${res.status}): ${errText}`);
     } catch (err: any) {
       lastError = err;
-      // If it's a hard error and not 503/429/404, we still try next model if available
+      // Continue to next model
     }
   }
 
