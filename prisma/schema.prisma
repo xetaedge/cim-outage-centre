@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  role         String     @default("INCIDENT_MANAGER") // ADMIN, INCIDENT_MANAGER, GUEST
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model Incident {
+  id                     String           @id @default(uuid())
+  number                 String           @unique
+  shortDescription       String
+  description            String?
+  priority               String           @default("P1") // P1, P2, P3, P4
+  status                 String           @default("INVESTIGATING") // INVESTIGATING, IDENTIFIED, MONITORING, RESOLVED, CLOSED
+  openedAt               DateTime         @default(now())
+  closedAt               DateTime?
+  resolvedAt             DateTime?
+  nextUpdateDueAt        DateTime?        // Mandatory next update cadence timestamp
+  assignmentGroup        String
+  assignedTo             String?
+  cmdbCi                 String?
+  businessService        String?
+  cti                    String?
+  issueSummary           String?
+  teamsBridgeLink        String?
+  teamsConferenceId      String?
+  ettrMinutes            Int              @default(30)
+  aiRootCause            String?
+  aiBusinessImpact       String?
+  aiTechnicalSummary     String?
+  aiExecutiveSummary     String?
+  aiCurrentStatusSummary String?
+  aiDoneSoFar            String?          // Structured AI summary: What has been done so far
+  aiWhatIsAwaited        String?          // Structured AI summary: What is awaited
+  
+  // New CIM Attributes
+  totalOutageDuration    String?
+  relatedIncidents       String?
+  teamsInvolved          String?
+  partnerLead            String?
+  cdItCoordinator        String?
+  stakeholdersInformed   String?
+
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  updates                IncidentUpdate[]
+  sites                  IncidentSite[]
+}
+
+model Site {
+  id              String              @id @default(uuid())
+  name            String
+  code            String              @unique
+  country         String
+  state           String?
+  city            String
+  lat             Float
+  lng             Float
+  businessUnit    String
+  siteType        String              @default("Corporate") // Corporate, Warehouse, Plant, Other
+  supportEmails   String?             // comma-separated emails for bridge/CIM notifications
+  status          String              @default("HEALTHY") // HEALTHY, WARNING, IMPACTED
+  usersImpacted   Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  incidents       IncidentSite[]
+  supportPersons  SiteSupportPerson[]
+}
+
+model SiteSupportPerson {
+  id        String   @id @default(uuid())
+  siteId    String
+  name      String
+  mobile1   String?
+  mobile2   String?
+  email     String
+  priority  String   @default("Primary")   // Primary, Secondary
+  type      String   @default("Internal")  // Internal, External, Vendor
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model IncidentSite {
+  incidentId String
+  siteId     String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([incidentId, siteId])
+}
+
+model IncidentUpdate {
+  id           String   @id @default(uuid())
+  incidentId   String
+  updateNumber Int
+  comment      String
+  authorName   String
+  isFinal      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model HistoricalIncident {
+  id              String   @id @default(uuid())
+  number          String   @unique
+  title           String
+  category        String
+  shortDescription String?
+  description     String?
+  cti             String?
+  resolutionNotes String
+  rootCause       String
+  assignmentGroup String?
+  createdAt       DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  userName  String
+  userRole  String
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  encrypted Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model AssignmentGroup {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  email     String   // comma-separated if multiple emails for this group
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

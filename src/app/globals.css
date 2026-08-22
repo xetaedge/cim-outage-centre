@@ -1,0 +1,143 @@
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f172a;
+  --card: #1e293b;
+  --accent: #2563eb;
+  --status-green: #22c55e;
+  --status-yellow: #facc15;
+  --status-orange: #fb923c;
+  --status-red: #ef4444;
+}
+
+body {
+  background-color: #0f172a;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism styling */
+.glass-card {
+  background: rgba(30, 41, 59, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.glass-nav {
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-modal {
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Custom Leaflet Map Dark Adjustments */
+.leaflet-container {
+  background: #0f172a !important;
+  font-family: inherit !important;
+  border-radius: 12px;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #1e293b !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+  border-radius: 12px !important;
+}
+
+.leaflet-popup-tip {
+  background: #1e293b !important;
+}
+
+/* ENHANCED MAP BLINKING & PULSING ANIMATIONS */
+@keyframes pulseRedEnhanced {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.9), 0 0 12px rgba(239, 68, 68, 0.8);
+    transform: scale(0.95);
+  }
+  50% {
+    box-shadow: 0 0 0 16px rgba(239, 68, 68, 0), 0 0 24px rgba(239, 68, 68, 1);
+    transform: scale(1.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 0 12px rgba(239, 68, 68, 0.8);
+    transform: scale(0.95);
+  }
+}
+
+@keyframes pulseOrangeEnhanced {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.8), 0 0 8px rgba(251, 146, 60, 0.6);
+    transform: scale(0.95);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(251, 146, 60, 0), 0 0 18px rgba(251, 146, 60, 0.9);
+    transform: scale(1.15);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 146, 60, 0), 0 0 8px rgba(251, 146, 60, 0.6);
+    transform: scale(0.95);
+  }
+}
+
+.marker-pulse-red {
+  width: 18px;
+  height: 18px;
+  background-color: #ef4444;
+  border: 2.5px solid #ffffff;
+  border-radius: 50%;
+  animation: pulseRedEnhanced 1.2s ease-in-out infinite;
+  cursor: pointer;
+}
+
+.marker-pulse-orange {
+  width: 16px;
+  height: 16px;
+  background-color: #fb923c;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  animation: pulseOrangeEnhanced 1.5s ease-in-out infinite;
+  cursor: pointer;
+}
+
+.marker-pulse-green {
+  width: 14px;
+  height: 14px;
+  background-color: #22c55e;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+  cursor: pointer;
+}
