@@ -15,9 +15,9 @@ export interface TeamsCredentials {
 export async function getTeamsCredentials(): Promise<TeamsCredentials> {
   const defaults: TeamsCredentials = {
     appName: 'Graph Java quick start',
-    clientId: 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a',
-    clientSecret: '',
-    tenantId: 'common',
+    clientId: process.env.AZURE_CLIENT_ID || 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a',
+    clientSecret: process.env.AZURE_CLIENT_SECRET || '',
+    tenantId: process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e',
     webhookUrl: 'https://outlook.office.com/webhook/cim-incidents',
   };
 
