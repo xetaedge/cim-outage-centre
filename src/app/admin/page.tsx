@@ -42,6 +42,9 @@ export default function AdminSettingsPage() {
   const [snPassword, setSnPassword] = useState('VK0oo6l+YbZ=');
   const [teamsWebhook, setTeamsWebhook] = useState('https://outlook.office.com/webhook/cim-incidents');
 
+  // Navigation Tab State
+  const [activeTab, setActiveTab] = useState<'ai' | 'microsoft' | 'servicenow' | 'users' | 'groups' | 'notifications' | 'all'>('ai');
+
   // Microsoft Teams Plug & Play API Configuration State
   const [teamsAppName, setTeamsAppName] = useState('Graph Java quick start');
   const [teamsClientId, setTeamsClientId] = useState('bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a');
@@ -592,33 +595,73 @@ export default function AdminSettingsPage() {
         </p>
       </div>
 
-      {/* Prominent Historical Bulk Upload Navigation Card */}
-      <div className="glass-card p-6 border border-purple-500/40 rounded-2xl bg-gradient-to-r from-purple-950/40 via-slate-900 to-slate-900 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 bg-purple-500/20 border border-purple-500/40 rounded-xl text-purple-400">
-              <Upload className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-white">Bulk Upload Historical Incident Data</h2>
-              <p className="text-xs text-slate-300">
-                Upload CSV or JSON historical incident archives to train Source C of the AI Recommended Solutions Engine.
-              </p>
-            </div>
-          </div>
-
-          <Link
-            href="/admin/bulk-upload"
-            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-2xl flex items-center space-x-2 transition-all"
+      {/* Top Quick Navigation Tabs */}
+      <div className="flex flex-wrap gap-2 p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl backdrop-blur-md sticky top-16 z-20 shadow-xl">
+        {[
+          { id: 'ai', label: '🤖 Google Gemini AI Engine', badge: 'Active' },
+          { id: 'microsoft', label: '🛡️ Microsoft Entra & Graph' },
+          { id: 'servicenow', label: '⚙️ ServiceNow' },
+          { id: 'users', label: '👥 Users & Access' },
+          { id: 'groups', label: '🏷️ Assignment Groups' },
+          { id: 'notifications', label: '📧 Notifications' },
+          { id: 'bulk', label: '📦 Bulk Upload' },
+          { id: 'all', label: '📋 View All' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === tab.id
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md font-extrabold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
           >
-            <span>Open Bulk Upload Page</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+            <span>{tab.label}</span>
+            {tab.badge && (
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                  activeTab === tab.id
+                    ? 'bg-black/20 text-slate-950 font-bold'
+                    : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                }`}
+              >
+                {tab.badge}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
+      {/* Prominent Historical Bulk Upload Navigation Card */}
+      {(activeTab === 'bulk' || activeTab === 'all') && (
+        <div className="glass-card p-6 border border-purple-500/40 rounded-2xl bg-gradient-to-r from-purple-950/40 via-slate-900 to-slate-900 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-purple-500/20 border border-purple-500/40 rounded-xl text-purple-400">
+                <Upload className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Bulk Upload Historical Incident Data</h2>
+                <p className="text-xs text-slate-300">
+                  Upload CSV or JSON historical incident archives to train Source C of the AI Recommended Solutions Engine.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/admin/bulk-upload"
+              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-2xl flex items-center space-x-2 transition-all"
+            >
+              <span>Open Bulk Upload Page</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* User Management & Role Permissions Section */}
-      <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
+      {(activeTab === 'users' || activeTab === 'all') && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
           <div className="flex items-center space-x-3">
             <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400">
@@ -865,25 +908,26 @@ export default function AdminSettingsPage() {
       )}
 
       {/* Assignment Groups Notification Directory Section */}
-      <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                Assignment Groups & Notification Mapping
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
-                  {assignmentGroups.length} Groups Configured
-                </span>
-              </h2>
-              <p className="text-xs text-secondaryText">
-                Configure dedicated notification email addresses for each Assignment Group. When Bridge Emails or CIM Notifications are sent for an incident, the group email configured here will be automatically included in the recipient list alongside base recipients and impacted site support emails.
-              </p>
+      {(activeTab === 'groups' || activeTab === 'all') && (
+        <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  Assignment Groups & Notification Mapping
+                  <span className="px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+                    {assignmentGroups.length} Groups Configured
+                  </span>
+                </h2>
+                <p className="text-xs text-secondaryText">
+                  Configure dedicated notification email addresses for each Assignment Group. When Bridge Emails or CIM Notifications are sent for an incident, the group email configured here will be automatically included in the recipient list alongside base recipients and impacted site support emails.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
 
         {/* Add Group Form */}
         <form onSubmit={handleCreateAssignmentGroup} className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3">
@@ -1034,9 +1078,10 @@ export default function AdminSettingsPage() {
           </table>
         </div>
       </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Live ServiceNow Configuration Form */}
+      {/* Live ServiceNow Configuration Form */}
+      {(activeTab === 'servicenow' || activeTab === 'all') && (
         <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -1115,8 +1160,10 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         </div>
+      )}
 
-        {/* Google Gemini AI Engine Plug & Play Master Configuration Card */}
+      {/* Google Gemini AI Engine Plug & Play Master Configuration Card */}
+      {(activeTab === 'ai' || activeTab === 'all') && (
         <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -1382,8 +1429,10 @@ export default function AdminSettingsPage() {
             </div>
           </div>
         </div>
+      )}
 
-        {/* Unified Microsoft Entra ID & Graph API Master Plug & Play Card */}
+      {/* Unified Microsoft Entra ID & Graph API Master Plug & Play Card */}
+      {(activeTab === 'microsoft' || activeTab === 'all') && (
         <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-5">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -1419,35 +1468,41 @@ export default function AdminSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Application (Client) ID</label>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                <span>Application (Client) ID</span>
+                <span className="text-[10px] text-blue-400 font-normal">App Registration</span>
+              </label>
               <input
                 type="text"
                 placeholder="bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a"
                 value={teamsClientId}
                 onChange={(e) => setTeamsClientId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-yellow-400 font-mono focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Directory (Tenant) ID</label>
-              <input
-                type="text"
-                placeholder="00550e88-11f9-4a42-b775-d0274f01576e"
-                value={teamsTenantId}
-                onChange={(e) => setTeamsTenantId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-slate-300 font-mono focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
 
             <div>
               <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
-                <span>Client Secret (Value)</span>
-                <span className="text-[10px] text-amber-400 font-normal">Use Value, not Secret ID</span>
+                <span>Directory (Tenant) ID</span>
+                <span className="text-[10px] text-blue-400 font-normal">Azure Tenant</span>
+              </label>
+              <input
+                type="text"
+                placeholder="00550e88-11f9-4a42-b775-d0274f01576e"
+                value={teamsTenantId}
+                onChange={(e) => setTeamsTenantId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                <span>Client Secret Value</span>
+                <span className="text-[10px] text-amber-400 font-normal">Secret Value (not Secret ID)</span>
               </label>
               <input
                 type="password"
-                placeholder="Paste client secret value here..."
+                placeholder="Enter client secret value..."
                 value={teamsClientSecret}
                 onChange={(e) => setTeamsClientSecret(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
@@ -1515,8 +1570,10 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         </div>
+      )}
 
-        {/* Notification Module */}
+      {/* Notification Module */}
+      {(activeTab === 'notifications' || activeTab === 'all') && (
         <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -1647,7 +1704,7 @@ export default function AdminSettingsPage() {
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
