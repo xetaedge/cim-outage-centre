@@ -35,6 +35,7 @@ async function main() {
       { key: 'TEAMS_TENANT_ID', value: process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e', encrypted: false },
       { key: 'TEAMS_CLIENT_ID', value: process.env.AZURE_CLIENT_ID || 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a', encrypted: false },
       { key: 'TEAMS_CLIENT_SECRET', value: process.env.AZURE_CLIENT_SECRET || '', encrypted: true },
+      { key: 'GEMINI_API_KEY', value: process.env.GEMINI_API_KEY || '', encrypted: false },
       { key: 'AI_MODEL', value: 'gemini-flash-lite-latest', encrypted: false },
     ],
   });

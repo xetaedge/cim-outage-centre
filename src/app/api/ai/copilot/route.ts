@@ -1,30 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getGeminiConfig, callGeminiAPI } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
-
-// ---------------------------------------------------------------------------
-// AI Configuration — resolves API key & model from DB → env → defaults
-// (Replicates the private getAIConfig logic from @/lib/openai)
-// ---------------------------------------------------------------------------
-async function getAIConfig(): Promise<{ apiKey: string | null; model: string }> {
-  try {
-    const [keySetting, modelSetting] = await Promise.all([
-      prisma.systemSetting.findUnique({ where: { key: 'OPENAI_API_KEY' } }),
-      prisma.systemSetting.findUnique({ where: { key: 'AI_MODEL' } }),
-    ]);
-
-    const apiKey = keySetting?.value || process.env.OPENAI_API_KEY || null;
-    const model = modelSetting?.value || 'gpt-4o-mini';
-
-    return { apiKey, model };
-  } catch {
-    return {
-      apiKey: process.env.OPENAI_API_KEY || null,
-      model: 'gpt-4o-mini',
-    };
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { callGeminiAPI } from '@/lib/gemini';
 
 export interface EnhancedUpdateOption {
   id: 'original' | 'option1' | 'option2' | 'option3';
@@ -19,54 +20,44 @@ export async function POST(request: Request) {
     }
 
     const draft = draftComment.trim();
-    const apiKey = process.env.OPENAI_API_KEY;
 
-    if (apiKey && apiKey.startsWith('sk-') && !apiKey.includes('simulated')) {
-      try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are an expert IT Incident Command AI assistant. Given a draft update comment for an incident, generate 3 enhanced professional options. Return JSON array of objects with keys: title, summary, tag.',
-              },
-              {
-                role: 'user',
-                content: `Draft update: "${draft}". Incident #: ${incidentNumber || 'P1'}. Group: ${assignmentGroup || 'Engineering'}.`,
-              },
-            ],
-            response_format: { type: 'json_object' },
-          }),
+    try {
+      const systemPrompt = 'You are an expert IT Incident Command AI assistant. Given a draft update comment for an incident, generate 3 enhanced professional options. Return JSON with key "options" containing an array of objects with keys: title, summary, tag.';
+      const prompt = `Draft update: "${draft}". Incident #: ${incidentNumber || 'P1'}. Group: ${assignmentGroup || 'Engineering'}. Priority: ${priority || 'P1'}.
+
+Return JSON:
+{
+  "options": [
+    { "title": "Executive & Leadership Briefing", "summary": "<polished executive summary>", "tag": "Executive Summary" },
+    { "title": "Technical & Engineering Deep-Dive", "summary": "<precise technical update with CI/telemetry metrics>", "tag": "Technical Telemetry" },
+    { "title": "Customer & SLA Impact Focus", "summary": "<user impact and restoration expectation>", "tag": "Customer & SLA Impact" }
+  ]
+}`;
+
+      const res = await callGeminiAPI({
+        systemPrompt,
+        prompt,
+        jsonOutput: true,
+        maxOutputTokens: 1000,
+        temperature: 0.3,
+      });
+
+      if (res.parsedJson && Array.isArray(res.parsedJson.options)) {
+        return NextResponse.json({
+          success: true,
+          options: [
+            { id: 'original', title: 'Original Manager Draft', summary: draft, tag: 'Your Input' },
+            ...res.parsedJson.options.slice(0, 3).map((opt: any, idx: number) => ({
+              id: `option${idx + 1}`,
+              title: opt.title || `AI Option ${idx + 1}`,
+              summary: opt.summary || opt.text,
+              tag: opt.tag || (idx === 0 ? 'Executive' : idx === 1 ? 'Technical' : 'Customer Impact'),
+            })),
+          ],
         });
-
-        if (response.ok) {
-          const data = await response.json();
-          const parsed = JSON.parse(data.choices[0].message.content);
-          if (Array.isArray(parsed.options)) {
-            return NextResponse.json({
-              success: true,
-              options: [
-                { id: 'original', title: 'Original Manager Draft', summary: draft, tag: 'Your Input' },
-                ...parsed.options.slice(0, 3).map((opt: any, idx: number) => ({
-                  id: `option${idx + 1}`,
-                  title: opt.title || `AI Option ${idx + 1}`,
-                  summary: opt.summary || opt.text,
-                  tag: opt.tag || (idx === 0 ? 'Executive' : idx === 1 ? 'Technical' : 'Customer Impact'),
-                })),
-              ],
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('OpenAI API call failed, using intelligent operational fallback:', err);
       }
+    } catch (err) {
+      console.warn('Gemini API call failed in enhance-update, using operational fallback:', err);
     }
 
     // Intelligent Generative AI Operational Fallback Engine (3 Distinct Options)

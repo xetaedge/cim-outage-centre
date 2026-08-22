@@ -50,9 +50,9 @@ export default function AdminSettingsPage() {
   const [testingTeamsConnection, setTestingTeamsConnection] = useState(false);
   const [teamsTestResult, setTeamsTestResult] = useState<any>(null);
 
-  // AI Configuration State
+  // AI Configuration State (Plug & Play)
   const [aiKey, setAiKey] = useState('');
-  const [aiModel, setAiModel] = useState('gpt-4o-mini');
+  const [aiModel, setAiModel] = useState('gemini-flash-lite-latest');
 
   // Notification Module State
   const [bridgeRecipients, setBridgeRecipients] = useState('');
@@ -1074,58 +1074,57 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Microsoft Teams Integrations & AI Settings */}
+        {/* Google Gemini AI Engine Plug & Play Master Configuration Card */}
         <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-yellow-400 animate-pulse" />
-              Generative AI Model & Notification Settings
+              Google Gemini AI Engine (Plug & Play Master Config)
             </h2>
+            <span className="text-[10px] bg-yellow-500/20 text-yellow-300 px-2.5 py-0.5 rounded-full font-bold border border-yellow-500/30">
+              AI Analysis • RCA • Copilot
+            </span>
           </div>
+
+          <p className="text-xs text-secondaryText leading-relaxed">
+            Centralized Google Gemini AI configuration. This single API key powers all AI capabilities across the platform: <strong>AI Powered Analysis</strong>, <strong>Executive Briefings</strong>, <strong>Root Cause Analysis (RCA)</strong>, <strong>Copilot Chatbot</strong>, and <strong>Update Enhancements</strong>.
+          </p>
 
           <div className="space-y-4 text-xs">
             {/* Gemini API Key */}
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Gemini API Key</label>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                <span>Google Gemini API Key</span>
+                <span className="text-[10px] text-amber-400 font-normal">Active across entire portal</span>
+              </label>
               <input
-                type="password"
-                placeholder="sk-..."
+                type="text"
+                placeholder="AQ.Ab8RN6..."
                 value={aiKey}
                 onChange={(e) => setAiKey(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-accent"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-yellow-500"
               />
-              <p className="text-[10px] text-slate-500 mt-1 font-mono">
-                Used to synthesize briefings, updates, enhance summaries, and power Copilot chatbot.
-              </p>
             </div>
 
             {/* AI Model selector */}
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Generative AI Model Selector</label>
+              <label className="block text-slate-400 font-semibold mb-1">Generative AI Model</label>
               <select
                 value={aiModel}
                 onChange={(e) => setAiModel(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-accent"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-yellow-500"
               >
-                <option value="gemini-flash-latest">Gemini Flash Latest (Ultra-Fast Operational Synthesis)</option>
-                <option value="gemini-pro-latest">Gemini Pro Latest (Enterprise Executive Model)</option>
+                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (⚡ Fast & Highly Reliable — Recommended)</option>
+                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Next-Gen 3.1 Flash Lite)</option>
+                <option value="gemini-flash-latest">gemini-flash-latest (Gemini 3.7 Flash Thinking Model)</option>
+                <option value="gemini-1.5-flash">gemini-1.5-flash (Gemini 1.5 Flash Stable)</option>
+                <option value="gemini-1.5-pro">gemini-1.5-pro (Gemini 1.5 Pro Deep Reasoning)</option>
               </select>
-            </div>
-
-            {/* Microsoft Teams Webhook */}
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Teams Notification Webhook</label>
-              <input
-                type="text"
-                value={teamsWebhook}
-                onChange={(e) => setTeamsWebhook(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-purple-300 font-mono focus:outline-none focus:border-purple-500"
-              />
             </div>
 
             {aiTestResult && (
               <div
-                className={`p-3.5 rounded-xl border text-xs space-y-1 ${
+                className={`p-3.5 rounded-xl border text-xs space-y-1 animate-fadeIn ${
                   aiTestResult.success
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                     : 'bg-red-500/10 border-red-500/30 text-red-400'
@@ -1133,19 +1132,30 @@ export default function AdminSettingsPage() {
               >
                 <p className="font-bold">{aiTestResult.message}</p>
                 {aiTestResult.latencyMs && (
-                  <p className="text-[11px] font-mono opacity-80">Latency: {aiTestResult.latencyMs}ms</p>
+                  <p className="text-[11px] font-mono opacity-80">Latency Benchmark: {aiTestResult.latencyMs}ms</p>
                 )}
               </div>
             )}
 
-            <button
-              onClick={handleTestOpenAI}
-              disabled={testingAiConnection}
-              className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-2"
-            >
-              {testingAiConnection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-yellow-400" />}
-              <span>Test Gemini Connection</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                onClick={handleTestOpenAI}
+                disabled={testingAiConnection}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-2"
+              >
+                {testingAiConnection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-yellow-400" />}
+                <span>Test Gemini AI Connection</span>
+              </button>
+
+              <button
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-white text-xs font-bold rounded-xl shadow-glowYellow transition-all flex items-center justify-center space-x-2"
+              >
+                {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>Save AI Configuration</span>
+              </button>
+            </div>
           </div>
         </div>
 

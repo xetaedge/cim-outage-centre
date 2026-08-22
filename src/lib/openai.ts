@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { callGeminiAPI, getGeminiConfig } from './gemini';
 
 export interface AIAnalysisResult {
   rootCause: string;
@@ -14,21 +15,6 @@ export interface AIAnalysisResult {
   issueSummaryRephrased: string;
 }
 
-// Helper to resolve AI config dynamically from DB settings or process.env fallbacks
-async function getAIConfig(): Promise<{ apiKey: string | null; model: string }> {
-  try {
-    const keySetting = await prisma.systemSetting.findUnique({ where: { key: 'GEMINI_API_KEY' } });
-    const modelSetting = await prisma.systemSetting.findUnique({ where: { key: 'AI_MODEL' } });
-
-    const apiKey = keySetting?.value || process.env.GEMINI_API_KEY || null;
-    const model = modelSetting?.value || 'gemini-flash-latest';
-
-    return { apiKey, model };
-  } catch (e) {
-    return { apiKey: process.env.GEMINI_API_KEY || null, model: 'gemini-flash-latest' };
-  }
-}
-
 export async function generateAIIncidentInsights(
   incidentNumber: string,
   shortDescription: string,
@@ -38,11 +24,8 @@ export async function generateAIIncidentInsights(
   updates: string[],
   affectedSites: string[]
 ): Promise<AIAnalysisResult> {
-  const { apiKey, model } = await getAIConfig();
-
-  if (apiKey) {
-    try {
-      const systemPrompt = `You are an expert IT Major Incident Management AI analyst. Your role is to synthesize raw chronological timeline updates into a polished, structured Executive Briefing suitable for C-level leadership and operations directors.
+  try {
+    const systemPrompt = `You are an expert IT Major Incident Management AI analyst. Your role is to synthesize raw chronological timeline updates into a polished, structured Executive Briefing suitable for C-level leadership and operations directors.
 
 CRITICAL OUTPUT RULES:
 1. Return valid JSON with these exact keys: rootCause, businessImpact, technicalSummary, executiveSummary, currentStatusSummary, doneSoFar, whatIsAwaited, ettrMinutes, issueSummaryRephrased
@@ -61,7 +44,7 @@ CRITICAL OUTPUT RULES:
 
 8. For "issueSummaryRephrased", rephrase the incident's short description and description into 1-2 very simple, easy-to-understand English sentences summarizing the core issue.`;
 
-      const userPrompt = `Incident ${incidentNumber} (${priority}) — "${shortDescription}"
+    const userPrompt = `Incident ${incidentNumber} (${priority}) — "${shortDescription}"
 Description: ${description}
 Assignment Group: ${assignmentGroup}
 Affected Sites: ${affectedSites.join(', ') || 'Not specified'}
@@ -71,43 +54,32 @@ ${updates.map((u, i) => `[Update ${i + 1}] ${u}`).join('\n')}
 
 Please synthesize these updates into a structured Executive Briefing. Remember: the "doneSoFar" must be multiple bullet points drafted from an ITSM perspective, written in easy English, while explicitly retaining all important CIs, teams, servers, and technicalities mentioned in the updates.`;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            temperature: 0.4,
-            responseMimeType: 'application/json',
-          },
-        }),
-      });
+    const result = await callGeminiAPI({
+      systemPrompt,
+      prompt: userPrompt,
+      jsonOutput: true,
+      temperature: 0.3,
+      maxOutputTokens: 2500,
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        const parsed = JSON.parse(responseText);
-        return {
-          rootCause: parsed.rootCause || 'Root cause under investigation.',
-          businessImpact: parsed.businessImpact || 'Impact assessed across affected business units.',
-          technicalSummary: parsed.technicalSummary || 'Technical teams isolating hardware and network layer telemetry.',
-          executiveSummary: parsed.executiveSummary || 'Command center established with active recovery workflows.',
-          currentStatusSummary: parsed.currentStatusSummary || parsed.executiveSummary || 'Active investigation in progress.',
-          doneSoFar: parsed.doneSoFar || 'Command bridge established and engineering teams initiated primary diagnostics.',
-          whatIsAwaited: parsed.whatIsAwaited || 'Awaiting secondary telemetry and final transaction latency verification.',
-          ettrMinutes: typeof parsed.ettrMinutes === 'number' ? parsed.ettrMinutes : 35,
-          duplicateIncidentDetected: false,
-          issueSummaryRephrased: parsed.issueSummaryRephrased || shortDescription,
-        };
-      } else {
-        console.warn('Gemini API call returned non-OK status:', response.status);
-      }
-    } catch (err) {
-      console.warn('Gemini API call failed, using intelligent operational fallback engine:', err);
+    const parsed = result.parsedJson || {};
+    if (parsed.executiveSummary || parsed.currentStatusSummary || parsed.technicalSummary) {
+      return {
+        rootCause: parsed.rootCause || 'Root cause under investigation.',
+        businessImpact: parsed.businessImpact || 'Impact assessed across affected business units.',
+        technicalSummary: parsed.technicalSummary || 'Technical teams isolating hardware and network layer telemetry.',
+        executiveSummary: parsed.executiveSummary || 'Command center established with active recovery workflows.',
+        currentStatusSummary: parsed.currentStatusSummary || parsed.executiveSummary || 'Active investigation in progress.',
+        doneSoFar: parsed.doneSoFar || 'Command bridge established and engineering teams initiated primary diagnostics.',
+        whatIsAwaited: parsed.whatIsAwaited || 'Awaiting secondary telemetry and final transaction latency verification.',
+        ettrMinutes: typeof parsed.ettrMinutes === 'number' ? parsed.ettrMinutes : 35,
+        duplicateIncidentDetected: false,
+        issueSummaryRephrased: parsed.issueSummaryRephrased || shortDescription,
+      };
+    }
+  } catch (err) {
+    console.warn('Gemini API call failed, using intelligent operational fallback engine:', err);
+  }
     }
   }
 
