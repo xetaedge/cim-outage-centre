@@ -10,24 +10,28 @@ export const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
 
 // Available model fallback priority list (high availability)
 export const GEMINI_MODEL_FALLBACKS = [
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash',
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
-  'gemini-2.0-flash-lite',
   'gemini-2.0-flash',
-  'gemini-flash-lite-latest',
+  'gemini-2.0-flash-lite',
+  'gemini-pro-latest',
   'gemini-1.5-pro',
 ];
 
 export function sanitizeGeminiModel(model?: string | null): string {
   if (!model || typeof model !== 'string') return DEFAULT_GEMINI_MODEL;
   const trimmed = model.trim();
-  if (trimmed.startsWith('gpt-') || trimmed.includes('openai') || trimmed === 'gemini-2.5-flash-lite') {
+  if (trimmed.startsWith('gpt-') || trimmed.includes('openai')) {
     return DEFAULT_GEMINI_MODEL;
   }
-  if (!trimmed.startsWith('gemini-')) {
+  if (!trimmed.startsWith('gemini-') && !trimmed.startsWith('gemma-') && !trimmed.startsWith('models/')) {
     return DEFAULT_GEMINI_MODEL;
   }
-  return trimmed;
+  return trimmed.replace(/^models\//, '');
 }
 
 /**

@@ -53,7 +53,8 @@ async function main() {
       { key: 'SERVICENOW_USERNAME', value: 'admin', encrypted: false },
       { key: 'SERVICENOW_PASSWORD', value: 'VK0oo6l+YbZ=', encrypted: true },
       { key: 'TEAMS_WEBHOOK_URL', value: 'https://outlook.office.com/webhook/cim-incidents', encrypted: false },
-      { key: 'AI_SUMMARY_MODEL', value: 'gpt-4o-mini', encrypted: false },
+      { key: 'GEMINI_API_KEY', value: process.env.GEMINI_API_KEY || '', encrypted: false },
+      { key: 'AI_MODEL', value: 'gemini-flash-lite-latest', encrypted: false },
     ],
   });
 

@@ -55,14 +55,14 @@ export default function AdminSettingsPage() {
 
   // AI Configuration State (Plug & Play)
   const [aiKey, setAiKey] = useState('');
-  const [aiModel, setAiModel] = useState('gemini-1.5-flash');
+  const [aiModel, setAiModel] = useState('gemini-flash-lite-latest');
   const [availableModels, setAvailableModels] = useState<any[]>([
-    { name: 'gemini-1.5-flash', displayName: 'gemini-1.5-flash (⚡ Fast & High Availability)', badge: 'Recommended' },
+    { name: 'gemini-flash-lite-latest', displayName: 'gemini-flash-lite-latest (⚡ Ultra-Fast / Sub-Second)', badge: 'Recommended' },
+    { name: 'gemini-flash-latest', displayName: 'gemini-flash-latest (⚡ High Speed Operational Synthesis)', badge: 'Production' },
+    { name: 'gemini-3.5-flash-lite', displayName: 'gemini-3.5-flash-lite (Next-Gen Flash Lite)', badge: 'Next-Gen' },
+    { name: 'gemini-3.5-flash', displayName: 'gemini-3.5-flash (Next-Gen Production Flash)', badge: 'High Speed' },
+    { name: 'gemini-1.5-flash', displayName: 'gemini-1.5-flash (Standard Flash)', badge: 'Stable' },
     { name: 'gemini-1.5-flash-8b', displayName: 'gemini-1.5-flash-8b (High Capacity / Zero 503s)', badge: 'High Capacity' },
-    { name: 'gemini-2.0-flash-lite', displayName: 'gemini-2.0-flash-lite (Next-Gen Flash Lite)', badge: 'Next-Gen' },
-    { name: 'gemini-2.0-flash', displayName: 'gemini-2.0-flash (Next-Gen Full Speed)', badge: 'High Speed' },
-    { name: 'gemini-flash-lite-latest', displayName: 'gemini-flash-lite-latest (Standard Flash Lite)', badge: 'Lite' },
-    { name: 'gemini-1.5-pro', displayName: 'gemini-1.5-pro (Deep Strategic Analysis)', badge: 'Deep Reasoning' },
   ]);
   const [loadingModels, setLoadingModels] = useState(false);
 
@@ -1219,52 +1219,52 @@ export default function AdminSettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {[
                   {
-                    id: 'gemini-1.5-flash',
-                    title: 'Gemini 1.5 Flash',
+                    id: 'gemini-flash-lite-latest',
+                    title: 'Gemini Flash Lite (Latest)',
                     badge: 'Recommended',
                     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-                    desc: 'Fast, high-throughput, general purpose operations synthesis.',
+                    desc: 'Lightning fast sub-second latency (800ms). Ideal for real-time analysis & Copilot.',
+                    icon: '⚡',
+                  },
+                  {
+                    id: 'gemini-flash-latest',
+                    title: 'Gemini Flash (Latest)',
+                    badge: 'Production',
+                    badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+                    desc: 'Auto-tracking latest stable Flash. High quality operational synthesis & RCA.',
+                    icon: '🚀',
+                  },
+                  {
+                    id: 'gemini-3.5-flash-lite',
+                    title: 'Gemini 3.5 Flash Lite',
+                    badge: 'Next-Gen',
+                    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+                    desc: 'Next-generation ultra-efficient high performance reasoning engine.',
+                    icon: '🌟',
+                  },
+                  {
+                    id: 'gemini-3.5-flash',
+                    title: 'Gemini 3.5 Flash',
+                    badge: 'High Speed',
+                    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                    desc: 'Next-generation flagship speed with superior multi-paragraph synthesis.',
+                    icon: '💡',
+                  },
+                  {
+                    id: 'gemini-1.5-flash',
+                    title: 'Gemini 1.5 Flash',
+                    badge: 'Stable',
+                    badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+                    desc: 'Standard Gemini 1.5 Flash production model.',
                     icon: '⚡',
                   },
                   {
                     id: 'gemini-1.5-flash-8b',
                     title: 'Gemini 1.5 Flash-8B',
                     badge: 'High Capacity',
-                    badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-                    desc: 'Lightweight, ultra-low latency, immune to 503 capacity spikes.',
-                    icon: '🛡️',
-                  },
-                  {
-                    id: 'gemini-2.0-flash-lite',
-                    title: 'Gemini 2.0 Flash Lite',
-                    badge: 'Next-Gen',
-                    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-                    desc: 'Next-generation cost-efficient high speed multimodal engine.',
-                    icon: '🚀',
-                  },
-                  {
-                    id: 'gemini-2.0-flash',
-                    title: 'Gemini 2.0 Flash',
-                    badge: 'High Speed',
-                    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-                    desc: 'Next-generation production model with enhanced coding & reasoning.',
-                    icon: '⚡',
-                  },
-                  {
-                    id: 'gemini-1.5-pro',
-                    title: 'Gemini 1.5 Pro',
-                    badge: 'Deep Reasoning',
                     badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
-                    desc: '2M context window. Ideal for complex Root Cause Analysis (RCA).',
-                    icon: '🧠',
-                  },
-                  {
-                    id: 'gemini-flash-latest',
-                    title: 'Gemini Flash (Latest)',
-                    badge: 'Auto-Update',
-                    badgeColor: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-                    desc: 'Always uses the latest stable Gemini Flash model release.',
-                    icon: '💡',
+                    desc: 'High capacity model designed for high concurrent throughput.',
+                    icon: '🛡️',
                   },
                 ].map((m) => {
                   const isSelected = aiModel === m.id;
@@ -1309,48 +1309,51 @@ export default function AdminSettingsPage() {
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white font-mono text-xs focus:outline-none focus:border-yellow-500 cursor-pointer"
                     style={{ backgroundColor: '#030712', color: '#ffffff' }}
                   >
-                    <optgroup label="🌟 Gemini 1.5 Models (Production Stable)" style={{ backgroundColor: '#0f172a', color: '#38bdf8' }}>
+                    <optgroup label="⚡ Ultra-Fast & Recommended Aliases" style={{ backgroundColor: '#0f172a', color: '#4ade80' }}>
+                      <option value="gemini-flash-lite-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-flash-lite-latest — Gemini Flash Lite Latest (Recommended • 800ms)
+                      </option>
+                      <option value="gemini-flash-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-flash-latest — Gemini Flash Latest (Production Auto-Track)
+                      </option>
+                      <option value="gemini-pro-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-pro-latest — Gemini Pro Latest
+                      </option>
+                    </optgroup>
+
+                    <optgroup label="🌟 Gemini 3.5 & Next-Gen Models" style={{ backgroundColor: '#0f172a', color: '#fde047' }}>
+                      <option value="gemini-3.5-flash-lite" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-3.5-flash-lite — Gemini 3.5 Flash Lite
+                      </option>
+                      <option value="gemini-3.5-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-3.5-flash — Gemini 3.5 Flash
+                      </option>
+                      <option value="gemini-3.6-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-3.6-flash — Gemini 3.6 Flash
+                      </option>
+                      <option value="gemini-3.7-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-3.7-flash — Gemini 3.7 Flash
+                      </option>
+                    </optgroup>
+
+                    <optgroup label="🛡️ Gemini 1.5 Models" style={{ backgroundColor: '#0f172a', color: '#38bdf8' }}>
                       <option value="gemini-1.5-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-1.5-flash — Gemini 1.5 Flash (Recommended)
+                        gemini-1.5-flash — Gemini 1.5 Flash
                       </option>
                       <option value="gemini-1.5-flash-8b" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-1.5-flash-8b — Gemini 1.5 Flash-8B (High Capacity / Zero 503s)
-                      </option>
-                      <option value="gemini-1.5-flash-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-1.5-flash-latest — Gemini 1.5 Flash Latest
+                        gemini-1.5-flash-8b — Gemini 1.5 Flash-8B (High Capacity)
                       </option>
                       <option value="gemini-1.5-pro" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
                         gemini-1.5-pro — Gemini 1.5 Pro (Deep Strategic Analysis)
                       </option>
-                      <option value="gemini-1.5-pro-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-1.5-pro-latest — Gemini 1.5 Pro Latest
-                      </option>
                     </optgroup>
 
-                    <optgroup label="🚀 Gemini 2.0 Models (Next-Gen High Performance)" style={{ backgroundColor: '#0f172a', color: '#c084fc' }}>
+                    <optgroup label="🚀 Gemini 2.0 Models" style={{ backgroundColor: '#0f172a', color: '#c084fc' }}>
                       <option value="gemini-2.0-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-2.0-flash — Gemini 2.0 Flash (Next-Gen Production)
+                        gemini-2.0-flash — Gemini 2.0 Flash
                       </option>
                       <option value="gemini-2.0-flash-lite" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-2.0-flash-lite — Gemini 2.0 Flash Lite (Cost-Efficient)
-                      </option>
-                      <option value="gemini-2.0-flash-exp" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-2.0-flash-exp — Gemini 2.0 Flash Experimental
-                      </option>
-                      <option value="gemini-2.0-pro-exp-02-05" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-2.0-pro-exp-02-05 — Gemini 2.0 Pro Experimental
-                      </option>
-                    </optgroup>
-
-                    <optgroup label="💡 Specialized & Auto-Tracking Model Aliases" style={{ backgroundColor: '#0f172a', color: '#fde047' }}>
-                      <option value="gemini-flash-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-flash-latest — Gemini Flash Latest
-                      </option>
-                      <option value="gemini-flash-lite-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-flash-lite-latest — Gemini Flash Lite Latest
-                      </option>
-                      <option value="gemini-pro-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
-                        gemini-pro-latest — Gemini Pro Latest
+                        gemini-2.0-flash-lite — Gemini 2.0 Flash Lite
                       </option>
                     </optgroup>
 
