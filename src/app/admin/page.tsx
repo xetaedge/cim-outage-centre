@@ -662,162 +662,164 @@ export default function AdminSettingsPage() {
 
       {/* User Management & Role Permissions Section */}
       {(activeTab === 'users' || activeTab === 'all') && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400">
-              <Users className="w-5 h-5" />
+        <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  User Management & Access Control
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Manage registered users, promote permissions (Admin, Incident Manager, Guest), and provision accounts.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                User Management & Access Control
-              </h2>
-              <p className="text-xs text-slate-400">
-                Manage registered users, promote permissions (Admin, Incident Manager, Guest), and provision accounts.
-              </p>
-            </div>
-          </div>
 
-          <button
-            onClick={() => setShowAddUserModal(true)}
-            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-accent hover:from-blue-500 hover:to-accentHover text-white text-xs font-bold rounded-xl shadow-glowBlue flex items-center space-x-2 transition-all"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add New User</span>
-          </button>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Total Users</span>
-            <span className="text-base font-extrabold text-white">{userStats.total}</span>
-          </div>
-          <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-            <span className="text-[10px] uppercase font-bold text-purple-400 block mb-0.5">Administrators</span>
-            <span className="text-base font-extrabold text-purple-300">{userStats.admins}</span>
-          </div>
-          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-            <span className="text-[10px] uppercase font-bold text-blue-400 block mb-0.5">Incident Managers</span>
-            <span className="text-base font-extrabold text-blue-300">{userStats.managers}</span>
-          </div>
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-            <span className="text-[10px] uppercase font-bold text-emerald-400 block mb-0.5">Guests</span>
-            <span className="text-base font-extrabold text-emerald-300">{userStats.guests}</span>
-          </div>
-        </div>
-
-        {/* Search & Filter */}
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <div className="flex-1 min-w-[220px] relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search by user name or email..."
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-bold text-slate-400">Filter Role:</span>
-            <select
-              value={userRoleFilter}
-              onChange={(e) => setUserRoleFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-800 text-xs text-white rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-accent"
+            <button
+              onClick={() => setShowAddUserModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-accent hover:from-blue-500 hover:to-accentHover text-white text-xs font-bold rounded-xl shadow-glowBlue flex items-center space-x-2 transition-all"
             >
-              <option value="ALL">All Roles ({userStats.total})</option>
-              <option value="ADMIN">Administrators ({userStats.admins})</option>
-              <option value="INCIDENT_MANAGER">Incident Managers ({userStats.managers})</option>
-              <option value="GUEST">Guests ({userStats.guests})</option>
-            </select>
+              <UserPlus className="w-4 h-4" />
+              <span>Add New User</span>
+            </button>
           </div>
-        </div>
 
-        {/* Users Table */}
-        <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
-              <tr>
-                <th className="py-2.5 px-4">User</th>
-                <th className="py-2.5 px-4">Email</th>
-                <th className="py-2.5 px-4">Assigned Role & Permissions</th>
-                <th className="py-2.5 px-4">Registered</th>
-                <th className="py-2.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {loadingUsers ? (
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Total Users</span>
+              <span className="text-base font-extrabold text-white">{userStats.total}</span>
+            </div>
+            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+              <span className="text-[10px] uppercase font-bold text-purple-400 block mb-0.5">Administrators</span>
+              <span className="text-base font-extrabold text-purple-300">{userStats.admins}</span>
+            </div>
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+              <span className="text-[10px] uppercase font-bold text-blue-400 block mb-0.5">Incident Managers</span>
+              <span className="text-base font-extrabold text-blue-300">{userStats.managers}</span>
+            </div>
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <span className="text-[10px] uppercase font-bold text-emerald-400 block mb-0.5">Guests</span>
+              <span className="text-base font-extrabold text-emerald-300">{userStats.guests}</span>
+            </div>
+          </div>
+
+          {/* Search & Filter */}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="flex-1 min-w-[220px] relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search by user name or email..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-bold text-slate-400">Filter Role:</span>
+              <select
+                value={userRoleFilter}
+                onChange={(e) => setUserRoleFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 text-xs text-white rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-accent"
+              >
+                <option value="ALL">All Roles ({userStats.total})</option>
+                <option value="ADMIN">Administrators ({userStats.admins})</option>
+                <option value="INCIDENT_MANAGER">Incident Managers ({userStats.managers})</option>
+                <option value="GUEST">Guests ({userStats.guests})</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Users Table */}
+          <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-900/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto text-accent mb-2" />
-                    <span>Loading registered users...</span>
-                  </td>
+                  <th className="py-2.5 px-4">User</th>
+                  <th className="py-2.5 px-4">Email</th>
+                  <th className="py-2.5 px-4">Assigned Role & Permissions</th>
+                  <th className="py-2.5 px-4">Registered</th>
+                  <th className="py-2.5 px-4 text-right">Actions</th>
                 </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    No users matching criteria found.
-                  </td>
-                </tr>
-              ) : (
-                users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-900/50 transition-colors">
-                    <td className="py-2.5 px-4">
-                      <div className="flex items-center space-x-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-white">
-                          {u.name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="font-semibold text-white">{u.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4 font-mono text-slate-400">{u.email}</td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex items-center space-x-2">
-                        <select
-                          value={u.role}
-                          disabled={updatingUserId === u.id}
-                          onChange={(e) => handleUpdateRole(u.id, e.target.value)}
-                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border focus:outline-none transition-all ${
-                            u.role === 'ADMIN'
-                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                              : u.role === 'INCIDENT_MANAGER'
-                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                          }`}
-                        >
-                          <option value="ADMIN" className="bg-slate-900 text-purple-300 font-bold">
-                            👑 Administrator (Full Control)
-                          </option>
-                          <option value="INCIDENT_MANAGER" className="bg-slate-900 text-blue-300 font-bold">
-                            ⚡ Incident Manager (Bridge & Triage)
-                          </option>
-                          <option value="GUEST" className="bg-slate-900 text-emerald-300 font-bold">
-                            🛡️ Guest (Read-Only)
-                          </option>
-                        </select>
-                        {updatingUserId === u.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4 text-slate-400 font-mono text-[11px]">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="py-2.5 px-4 text-right">
-                      <button
-                        onClick={() => handleDeleteUser(u.id, u.name)}
-                        className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20"
-                        title="Delete User"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {loadingUsers ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto text-accent mb-2" />
+                      <span>Loading registered users...</span>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-500">
+                      No users matching criteria found.
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-900/50 transition-colors">
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-white">
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-semibold text-white">{u.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 font-mono text-slate-400">{u.email}</td>
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={u.role}
+                            disabled={updatingUserId === u.id}
+                            onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-lg border focus:outline-none transition-all ${
+                              u.role === 'ADMIN'
+                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                                : u.role === 'INCIDENT_MANAGER'
+                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            }`}
+                          >
+                            <option value="ADMIN" className="bg-slate-900 text-purple-300 font-bold">
+                              👑 Administrator (Full Control)
+                            </option>
+                            <option value="INCIDENT_MANAGER" className="bg-slate-900 text-blue-300 font-bold">
+                              ⚡ Incident Manager (Bridge & Triage)
+                            </option>
+                            <option value="GUEST" className="bg-slate-900 text-emerald-300 font-bold">
+                              🛡️ Guest (Read-Only)
+                            </option>
+                          </select>
+                          {updatingUserId === u.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-slate-400 font-mono text-[11px]">
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <button
+                          onClick={() => handleDeleteUser(u.id, u.name)}
+                          className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Add User Modal */}
       {showAddUserModal && (

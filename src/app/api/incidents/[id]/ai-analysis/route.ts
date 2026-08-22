@@ -7,15 +7,6 @@ function trunc(str: string | null | undefined, max: number): string {
   if (!str) return 'N/A';
   return str.length > max ? str.slice(0, max) + '…' : str;
 }
-    } catch (fetchErr: any) {
-      if (fetchErr.message?.startsWith('Gemini API error')) throw fetchErr;
-      lastError = fetchErr.message;
-      continue;
-    }
-  }
-
-  throw new Error(`All Gemini models unavailable. Last error: ${lastError}`);
-}
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {

@@ -55,42 +55,6 @@ export async function getGraphToken(overrideSecret?: string): Promise<string> {
 }
 
 /**
- * Fetch a Microsoft Graph Access Token using Client Credentials
- */
-export async function getGraphToken(): Promise<string> {
-  const { clientId, clientSecret, tenantId } = await getEmailConfig();
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Microsoft Azure Client ID or Client Secret is missing. Set AZURE_CLIENT_SECRET in Vercel or Admin Settings.');
-  }
-
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: 'https://graph.microsoft.com/.default',
-    grant_type: 'client_credentials',
-  });
-
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-  const res = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to acquire Microsoft Graph OAuth token (${res.status}): ${err}`);
-  }
-
-  const data = await res.json();
-  if (!data.access_token) {
-    throw new Error('Token endpoint did not return an access_token.');
-  }
-  return data.access_token;
-}
-
-/**
  * Looks up the email address for a given assignment group name from the DB.
  * Returns an empty string if not found.
  */

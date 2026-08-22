@@ -80,8 +80,6 @@ Please synthesize these updates into a structured Executive Briefing. Remember: 
   } catch (err) {
     console.warn('Gemini API call failed, using intelligent operational fallback engine:', err);
   }
-    }
-  }
 
   // ─── Structured Executive Synthesis Fallback Engine ───────────────────
   const siteCount = affectedSites.length || 1;

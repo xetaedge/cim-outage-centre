@@ -223,21 +223,6 @@ Return valid JSON with these exact keys:
         console.warn('[Think Engine] AI analysis failed, falling back to algorithmic match:', err);
       }
     }
-                ? parsed.recommendedActions
-                : thinkingResult.recommendedActions,
-              estimatedResolution: {
-                time: parsed.estimatedResolution?.time || parsed.estimatedResolutionTime || '~35 mins',
-                confidence: typeof parsed.estimatedResolution?.confidence === 'number' 
-                  ? parsed.estimatedResolution.confidence 
-                  : (typeof parsed.confidence === 'number' ? parsed.confidence : 80)
-              }
-            };
-          }
-        }
-      } catch (aiErr) {
-        console.warn('Gemini API call failed in think route, using scored DB result:', aiErr);
-      }
-    }
 
     return NextResponse.json({
       success: true,
