@@ -2,21 +2,30 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import {
   ShieldAlert,
-  ArrowRight,
   Loader2,
   AlertCircle,
   Sparkles,
   Radio,
   Shield,
+  Mail,
+  Lock,
+  ArrowRight,
+  KeyRound,
+  CheckCircle2,
 } from 'lucide-react';
 
 function LoginFormContent() {
   const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Local login credentials
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -26,9 +35,49 @@ function LoginFormContent() {
   }, [searchParams]);
 
   const handleSsoClick = () => {
-    setLoading(true);
+    setSsoLoading(true);
     setErrorMsg(null);
     window.location.href = '/api/auth/sso/login';
+  };
+
+  const handleLocalLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setErrorMsg('Please provide both email and password.');
+      return;
+    }
+
+    setLocalLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSuccessMsg(data.message || 'Login successful! Redirecting...');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 500);
+      } else {
+        setErrorMsg(data.error || 'Authentication failed. Please verify your credentials.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'An unexpected error occurred during login.');
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const setDemoCredentials = (demoEmail: string, demoPass: string = 'admin123') => {
+    setEmail(demoEmail);
+    setPassword(demoPass);
+    setErrorMsg(null);
   };
 
   return (
@@ -47,10 +96,10 @@ function LoginFormContent() {
         <div className="text-center space-y-1 border-b border-slate-800 pb-4">
           <h2 className="text-sm font-bold text-white flex items-center justify-center gap-2">
             <Shield className="w-4 h-4 text-blue-400" />
-            Enterprise Single Sign-On (SSO)
+            System Authentication
           </h2>
           <p className="text-xs text-slate-400">
-            Sign in with your corporate Microsoft Entra ID / Microsoft 365 account
+            Sign in with Enterprise SSO or your local administrator account
           </p>
         </div>
 
@@ -62,27 +111,23 @@ function LoginFormContent() {
           </div>
         )}
 
-        <div className="space-y-5">
-          <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2 text-xs text-slate-300">
-            <div className="flex items-center gap-2 font-bold text-white text-[13px]">
-              <Radio className="w-4 h-4 text-blue-400 animate-pulse" />
-              Corporate Identity Gateway
-            </div>
-            <p className="text-slate-400 leading-relaxed text-[11px]">
-              Authentication is securely managed via Microsoft Graph API. First-time users will be provisioned automatically with Guest permissions.
-            </p>
+        {successMsg && (
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-2.5 text-xs text-emerald-300 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="flex-1 leading-relaxed">{successMsg}</div>
           </div>
+        )}
 
-          {/* Microsoft SSO Button */}
+        <div className="space-y-5">
+          {/* Microsoft SSO Section */}
           <button
             onClick={handleSsoClick}
-            disabled={loading}
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-glowBlue flex items-center justify-center space-x-3 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+            disabled={ssoLoading || localLoading}
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-glowBlue flex items-center justify-center space-x-3 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           >
-            {loading ? (
+            {ssoLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              /* Microsoft 4-color square logo */
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 21 21">
                 <rect x="1" y="1" width="9" height="9" fill="#f25022" />
                 <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
@@ -90,17 +135,93 @@ function LoginFormContent() {
                 <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
               </svg>
             )}
-            <span>{loading ? 'Connecting to Microsoft...' : 'Sign in with Microsoft 365 (SSO)'}</span>
+            <span>{ssoLoading ? 'Connecting to Microsoft...' : 'Sign in with Microsoft 365 (SSO)'}</span>
           </button>
 
-          {/* First Time Registration Notice */}
-          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[11px] text-blue-300 space-y-1">
-            <span className="font-bold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-400" /> First-Time Access Policy
+          {/* Divider */}
+          <div className="relative flex py-1 items-center">
+            <div className="flex-grow border-t border-slate-800"></div>
+            <span className="flex-shrink mx-3 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+              Or Login With Local Account
             </span>
-            <p className="text-slate-400 text-[10px] leading-relaxed">
-              New accounts are granted <strong>Guest permissions</strong> upon first login. An Administrator can promote your role to <strong>Incident Manager</strong> or <strong>Administrator</strong>.
-            </p>
+            <div className="flex-grow border-t border-slate-800"></div>
+          </div>
+
+          {/* Local Login Form */}
+          <form onSubmit={handleLocalLogin} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@cim.corp"
+                required
+                className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/80 focus:ring-1 focus:ring-blue-500/50 transition-all"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/80 focus:ring-1 focus:ring-blue-500/50 transition-all"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={localLoading || ssoLoading}
+              className="w-full mt-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center space-x-2 transition-all disabled:opacity-50 shadow-sm"
+            >
+              {localLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+              ) : (
+                <KeyRound className="w-4 h-4 text-blue-400" />
+              )}
+              <span>{localLoading ? 'Signing in...' : 'Sign In with Credentials'}</span>
+            </button>
+          </form>
+
+          {/* Quick Demo Credentials Preset */}
+          <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Quick Demo Accounts</span>
+              <span className="text-[9px] text-slate-500 font-normal">pass: admin123</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setDemoCredentials('admin@cim.corp')}
+                className="py-1 px-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-[10px] text-blue-300 font-medium transition-colors text-center"
+              >
+                🛡️ Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => setDemoCredentials('manager@cim.corp')}
+                className="py-1 px-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-[10px] text-indigo-300 font-medium transition-colors text-center"
+              >
+                ⚡ Manager
+              </button>
+              <button
+                type="button"
+                onClick={() => setDemoCredentials('guest@cim.corp')}
+                className="py-1 px-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-[10px] text-slate-300 font-medium transition-colors text-center"
+              >
+                👁️ Guest
+              </button>
+            </div>
           </div>
         </div>
       </div>
