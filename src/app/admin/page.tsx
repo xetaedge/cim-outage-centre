@@ -111,8 +111,15 @@ export default function AdminSettingsPage() {
         if (s.TEAMS_CLIENT_ID) setTeamsClientId(s.TEAMS_CLIENT_ID);
         if (s.TEAMS_TENANT_ID) setTeamsTenantId(s.TEAMS_TENANT_ID);
         if (s.TEAMS_CLIENT_SECRET) setTeamsClientSecret(s.TEAMS_CLIENT_SECRET);
-        if (s.GEMINI_API_KEY || s.OPENAI_API_KEY) setAiKey(s.GEMINI_API_KEY || s.OPENAI_API_KEY);
-        if (s.AI_MODEL) setAiModel(s.AI_MODEL);
+        if (s.GEMINI_API_KEY) setAiKey(s.GEMINI_API_KEY);
+        if (s.AI_MODEL) {
+          const m = String(s.AI_MODEL).trim();
+          if (m.startsWith('gpt-') || m.includes('openai') || m === 'gemini-2.5-flash-lite' || !m.startsWith('gemini-')) {
+            setAiModel('gemini-flash-lite-latest');
+          } else {
+            setAiModel(m);
+          }
+        }
         if (s.BRIDGE_RECIPIENTS) setBridgeRecipients(s.BRIDGE_RECIPIENTS);
         if (s.CIM_UPDATE_RECIPIENTS) setCimUpdateRecipients(s.CIM_UPDATE_RECIPIENTS);
         if (s.GRAPH_SENDER_EMAIL) {

@@ -18,6 +18,18 @@ export const GEMINI_MODEL_FALLBACKS = [
   'gemini-1.5-pro',
 ];
 
+export function sanitizeGeminiModel(model?: string | null): string {
+  if (!model || typeof model !== 'string') return DEFAULT_GEMINI_MODEL;
+  const trimmed = model.trim();
+  if (trimmed.startsWith('gpt-') || trimmed.includes('openai') || trimmed === 'gemini-2.5-flash-lite') {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  if (!trimmed.startsWith('gemini-')) {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  return trimmed;
+}
+
 /**
  * Single source of truth for Gemini AI configuration.
  * Checks DB settings first, then falls back to environment variables or hardcoded default.
@@ -39,23 +51,20 @@ export async function getGeminiConfig(): Promise<GeminiConfig> {
       DEFAULT_GEMINI_API_KEY
     );
 
-    let model = (
+    const rawModel = (
       modelSetting?.value?.trim() ||
       process.env.AI_MODEL?.trim() ||
       DEFAULT_GEMINI_MODEL
     );
 
-    // If model is set to deprecated or non-gemini string, normalize to default
-    if (!model || model.startsWith('gpt-') || model === 'gemini-2.5-flash-lite') {
-      model = DEFAULT_GEMINI_MODEL;
-    }
+    const model = sanitizeGeminiModel(rawModel);
 
     return { apiKey, model };
   } catch (err) {
     console.warn('[Gemini Config] Could not query DB settings, using defaults/env:', err);
     return {
       apiKey: process.env.GEMINI_API_KEY?.trim() || DEFAULT_GEMINI_API_KEY,
-      model: process.env.AI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+      model: sanitizeGeminiModel(process.env.AI_MODEL) || DEFAULT_GEMINI_MODEL,
     };
   }
 }
@@ -79,7 +88,7 @@ export async function callGeminiAPI(params: {
     throw new Error('Gemini API Key is missing. Please configure it in Admin Settings.');
   }
 
-  const preferred = params.preferredModel || config.model || DEFAULT_GEMINI_MODEL;
+  const preferred = sanitizeGeminiModel(params.preferredModel || config.model);
   const modelsToTry = [
     preferred,
     ...GEMINI_MODEL_FALLBACKS.filter((m) => m !== preferred),
