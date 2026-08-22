@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { getMicrosoftCredentials, getMicrosoftGraphToken } from './microsoft';
 
 /**
  * Retrieves setting value by key, with optional fallback.
@@ -40,23 +41,17 @@ export function dedupeRecipients(recipients: any[]): any[] {
 }
 
 /**
- * Resolve Microsoft Graph / Azure AD email configuration with DB and environment variable fallbacks.
+ * Resolve Microsoft Graph / Azure AD email configuration.
  */
 export async function getEmailConfig() {
-  const dbClientId = await getSetting('TEAMS_CLIENT_ID');
-  const dbClientSecret = await getSetting('TEAMS_CLIENT_SECRET');
-  const dbTenantId = await getSetting('TEAMS_TENANT_ID');
-  const dbSender = await getSetting('GRAPH_SENDER_EMAIL');
+  return await getMicrosoftCredentials();
+}
 
-  const clientId = dbClientId || process.env.AZURE_CLIENT_ID || 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a';
-  const clientSecret = dbClientSecret || process.env.AZURE_CLIENT_SECRET || '';
-  let tenantId = dbTenantId || process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e';
-  if (tenantId === 'common') {
-    tenantId = process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e';
-  }
-  const senderEmail = dbSender || process.env.GRAPH_SENDER_EMAIL || 'shivam@xetainteractives.com';
-
-  return { clientId, clientSecret, tenantId, senderEmail };
+/**
+ * Fetch a Microsoft Graph Access Token using Client Credentials
+ */
+export async function getGraphToken(overrideSecret?: string): Promise<string> {
+  return await getMicrosoftGraphToken(overrideSecret);
 }
 
 /**

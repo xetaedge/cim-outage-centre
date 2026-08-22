@@ -1149,77 +1149,99 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Microsoft Teams Graph API & Command Bridge Plug & Play Authentication Card */}
-        <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-4">
+        {/* Unified Microsoft Entra ID & Graph API Master Plug & Play Card */}
+        <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-5">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                🔌
+              <span className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                <Shield className="w-4 h-4 text-blue-400" />
               </span>
-              Microsoft Teams Graph API (Plug & Play Authentication)
+              Microsoft Entra ID & Graph API (Plug & Play Master Config)
             </h2>
-            <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2.5 py-0.5 rounded-full font-bold border border-purple-500/30">
-              Command Bridge & Notifications
+            <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded-full font-bold border border-blue-500/30">
+              SSO • Graph Mail • Teams Bridge
             </span>
           </div>
 
-          <p className="text-xs text-secondaryText leading-relaxed">
-            Configures centralized Plug and Play authentication for Microsoft Graph Java / Teams API to generate live meeting bridges and deliver AI executive briefing notifications.
-          </p>
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300 space-y-1">
+            <p className="font-semibold text-white flex items-center gap-1.5">
+              <span>⚡ Single App Registration Architecture</span>
+            </p>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              All Microsoft integrations (Enterprise SSO, Microsoft Graph Email Dispatch, and Teams Command Bridge) use this single App Registration (<code className="text-blue-300">Graph Java quick start</code>).
+            </p>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">App Name</label>
+              <label className="block text-slate-400 font-semibold mb-1">App Registration Name</label>
               <input
                 type="text"
                 placeholder="e.g. Graph Java quick start"
                 value={teamsAppName}
                 onChange={(e) => setTeamsAppName(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-purple-500"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-blue-500"
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Client ID (Application ID)</label>
+              <label className="block text-slate-400 font-semibold mb-1">Application (Client) ID</label>
               <input
                 type="text"
                 placeholder="bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a"
                 value={teamsClientId}
                 onChange={(e) => setTeamsClientId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-yellow-400 font-mono focus:outline-none focus:border-purple-500"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-yellow-400 font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Tenant Authority ID</label>
+              <label className="block text-slate-400 font-semibold mb-1">Directory (Tenant) ID</label>
               <input
                 type="text"
-                placeholder="common or specific tenant GUID"
+                placeholder="00550e88-11f9-4a42-b775-d0274f01576e"
                 value={teamsTenantId}
                 onChange={(e) => setTeamsTenantId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-slate-300 font-mono focus:outline-none focus:border-purple-500"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-slate-300 font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Client Secret / Token (Optional)</label>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                <span>Client Secret (Value)</span>
+                <span className="text-[10px] text-amber-400 font-normal">Use Value, not Secret ID</span>
+              </label>
               <input
                 type="password"
-                placeholder="••••••••••••••••"
+                placeholder="Paste client secret value here..."
                 value={teamsClientSecret}
                 onChange={(e) => setTeamsClientSecret(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-purple-500"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
 
-            <div className="sm:col-span-2">
-              <label className="block text-slate-400 font-semibold mb-1">Teams Notification Webhook URL</label>
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                <span>Graph Sender Mailbox</span>
+                <span className="text-[10px] text-blue-400 font-normal">Exchange mailbox</span>
+              </label>
+              <input
+                type="email"
+                placeholder="shivam@xetainteractives.com"
+                value={senderEmail}
+                onChange={(e) => setSenderEmail(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1">Teams Webhook URL (Optional)</label>
               <input
                 type="text"
                 placeholder="https://outlook.office.com/webhook/..."
                 value={teamsWebhook}
                 onChange={(e) => setTeamsWebhook(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-purple-300 font-mono focus:outline-none focus:border-purple-500"
+                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-purple-300 font-mono focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -1245,17 +1267,17 @@ export default function AdminSettingsPage() {
               disabled={testingTeamsConnection}
               className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-2"
             >
-              {testingTeamsConnection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-purple-400" />}
-              <span>Test Teams Graph API Connection</span>
+              {testingTeamsConnection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-blue-400" />}
+              <span>Verify Microsoft OAuth & Authority</span>
             </button>
 
             <button
               onClick={handleSaveSettings}
               disabled={savingSettings}
-              className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-accent hover:from-purple-500 hover:to-accentHover text-white text-xs font-bold rounded-xl shadow-glowBlue transition-all flex items-center justify-center space-x-2"
+              className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-glowBlue transition-all flex items-center justify-center space-x-2"
             >
               {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              <span>Save AI & Teams Settings</span>
+              <span>Save Master Microsoft Settings</span>
             </button>
           </div>
         </div>

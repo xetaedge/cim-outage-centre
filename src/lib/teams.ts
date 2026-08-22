@@ -1,53 +1,14 @@
 import { prisma } from './prisma';
 import nodemailer from 'nodemailer';
+import { getMicrosoftCredentials, MicrosoftCredentials } from './microsoft';
 
-export interface TeamsCredentials {
-  appName: string;
-  clientId: string;
-  clientSecret: string;
-  tenantId: string;
-  webhookUrl: string;
-}
+export type TeamsCredentials = MicrosoftCredentials;
 
 /**
  * Dynamically retrieves Microsoft Teams Graph API Plug & Play credentials from DB settings.
  */
 export async function getTeamsCredentials(): Promise<TeamsCredentials> {
-  const defaults: TeamsCredentials = {
-    appName: 'Graph Java quick start',
-    clientId: process.env.AZURE_CLIENT_ID || 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a',
-    clientSecret: process.env.AZURE_CLIENT_SECRET || '',
-    tenantId: process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e',
-    webhookUrl: 'https://outlook.office.com/webhook/cim-incidents',
-  };
-
-  try {
-    const settings = await prisma.systemSetting.findMany({
-      where: {
-        key: {
-          in: [
-            'TEAMS_APP_NAME',
-            'TEAMS_CLIENT_ID',
-            'TEAMS_CLIENT_SECRET',
-            'TEAMS_TENANT_ID',
-            'TEAMS_WEBHOOK_URL',
-          ],
-        },
-      },
-    });
-
-    settings.forEach((s) => {
-      if (s.key === 'TEAMS_APP_NAME' && s.value) defaults.appName = s.value;
-      if (s.key === 'TEAMS_CLIENT_ID' && s.value) defaults.clientId = s.value;
-      if (s.key === 'TEAMS_CLIENT_SECRET' && s.value) defaults.clientSecret = s.value;
-      if (s.key === 'TEAMS_TENANT_ID' && s.value) defaults.tenantId = s.value;
-      if (s.key === 'TEAMS_WEBHOOK_URL' && s.value) defaults.webhookUrl = s.value;
-    });
-  } catch (err) {
-    console.warn('Could not fetch Teams settings from DB, using defaults/env', err);
-  }
-
-  return defaults;
+  return await getMicrosoftCredentials();
 }
 
 /**
