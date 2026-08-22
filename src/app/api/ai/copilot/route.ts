@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     const { apiKey, model } = aiConfig;
 
     // -----------------------------------------------------------------
-    // 2. Attempt Gemini API (using DB-configured key & model)
+    // 2. Attempt Gemini API (using DB-configured key & model with auto-fallback)
     // -----------------------------------------------------------------
     if (apiKey) {
       try {
@@ -120,54 +120,23 @@ export async function POST(request: Request) {
           historicalIncidents,
         );
 
-        // Build Gemini messages array from history
-        const contents = [];
-        
-        if (history && Array.isArray(history)) {
-          for (const msg of history) {
-            if (
-              msg &&
-              typeof msg.role === 'string' &&
-              typeof msg.content === 'string' &&
-              ['user', 'assistant'].includes(msg.role)
-            ) {
-              contents.push({
-                role: msg.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: msg.content }],
-              });
-            }
-          }
+        let fullPrompt = query;
+        if (history && Array.isArray(history) && history.length > 0) {
+          const formattedHistory = history
+            .map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+            .join('\n');
+          fullPrompt = `[Previous Conversation]\n${formattedHistory}\n\n[Current User Question]\n${query}`;
         }
 
-        contents.push({
-          role: 'user',
-          parts: [{ text: query }],
+        const result = await callGeminiAPI({
+          prompt: fullPrompt,
+          systemPrompt,
+          temperature: 0.5,
+          maxOutputTokens: 2048,
         });
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-goog-api-key': apiKey,
-          },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents,
-            generationConfig: {
-              temperature: 0.5,
-              maxOutputTokens: 2048,
-            },
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (responseText) {
-            return NextResponse.json({ success: true, response: responseText });
-          }
-        } else {
-          console.warn('Gemini API returned non-OK status:', response.status);
+        if (result.text) {
+          return NextResponse.json({ success: true, response: result.text, modelUsed: result.modelUsed });
         }
       } catch (err) {
         console.warn('[AI Copilot] Gemini call failed — falling back to local engine:', err);

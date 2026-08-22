@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { callGeminiAPI } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
 
@@ -179,7 +180,7 @@ export async function GET(request: Request) {
       }
     };
 
-    if (apiKey && topMatches.length > 0) {
+    if (topMatches.length > 0) {
       const prompt = `You are an expert ITSM AI Analyst. Analyze the target issue against the top matching past incidents and synthesize precise root causes and recommended actions.
 
 Target Search / Incident:
@@ -195,34 +196,33 @@ Return valid JSON with these exact keys:
 4. estimatedResolution: object { "time": "~30 mins", "confidence": 85 }`;
 
       try {
-        const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey,
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.3
-            }
-          }),
+        const aiRes = await callGeminiAPI({
+          prompt,
+          jsonOutput: true,
+          temperature: 0.3,
         });
 
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          const responseText = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (responseText) {
-            const parsed = JSON.parse(responseText);
-            thinkingResult = {
-              similarIncidents: Array.isArray(parsed.similarIncidents) && parsed.similarIncidents.length > 0
-                ? parsed.similarIncidents
-                : thinkingResult.similarIncidents,
-              rootCauses: Array.isArray(parsed.rootCauses) && parsed.rootCauses.length > 0
-                ? parsed.rootCauses
-                : parsed.commonRootCauses || thinkingResult.rootCauses,
-              recommendedActions: Array.isArray(parsed.recommendedActions) && parsed.recommendedActions.length > 0
+        if (aiRes.parsedJson) {
+          const parsed = aiRes.parsedJson;
+          thinkingResult = {
+            similarIncidents: Array.isArray(parsed.similarIncidents) && parsed.similarIncidents.length > 0
+              ? parsed.similarIncidents
+              : thinkingResult.similarIncidents,
+            rootCauses: Array.isArray(parsed.rootCauses) && parsed.rootCauses.length > 0
+              ? parsed.rootCauses
+              : parsed.commonRootCauses || thinkingResult.rootCauses,
+            recommendedActions: Array.isArray(parsed.recommendedActions) && parsed.recommendedActions.length > 0
+              ? parsed.recommendedActions
+              : parsed.actions || thinkingResult.recommendedActions,
+            estimatedResolution: parsed.estimatedResolution && typeof parsed.estimatedResolution === 'object'
+              ? parsed.estimatedResolution
+              : thinkingResult.estimatedResolution,
+          };
+        }
+      } catch (err) {
+        console.warn('[Think Engine] AI analysis failed, falling back to algorithmic match:', err);
+      }
+    }
                 ? parsed.recommendedActions
                 : thinkingResult.recommendedActions,
               estimatedResolution: {

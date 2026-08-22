@@ -158,12 +158,10 @@ export async function generateLiveAINotes(
   status: string,
   updates: string[]
 ): Promise<LiveAINotesResult> {
-  const { apiKey, model } = await getAIConfig();
   const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  if (apiKey) {
-    try {
-      const prompt = `You are an AI note-taker monitoring the live Microsoft Teams Command Bridge for IT Incident ${incidentNumber} (${shortDescription}, Priority: ${priority}, Status: ${status}).
+  try {
+    const prompt = `You are an AI note-taker monitoring the live Microsoft Teams Command Bridge for IT Incident ${incidentNumber} (${shortDescription}, Priority: ${priority}, Status: ${status}).
 Recent updates/discussion points:
 ${updates.length > 0 ? updates.join('\n') : 'Incident just opened. Engineering teams joining bridge.'}
 
@@ -173,31 +171,23 @@ Return valid JSON with these exact keys:
 2. focusArea (string: 5-10 words describing the current primary technical focus of the bridge)
 3. actionItems (array of strings: 2-3 specific immediate action items being assigned or executed on call)`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
-        })
-      });
+    const res = await callGeminiAPI({
+      prompt,
+      temperature: 0.3,
+      jsonOutput: true,
+    });
 
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          return {
-            summary: parsed.summary || 'Engineering bridge active; evaluating system telemetry and error logs.',
-            focusArea: parsed.focusArea || 'Root Cause Isolation & Telemetry Analysis',
-            actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : ['Review server logs', 'Monitor failover health'],
-            lastUpdated: nowStr
-          };
-        }
-      }
-    } catch (e) {
-      console.error('generateLiveAINotes error:', e);
+    if (res.parsedJson) {
+      const parsed = res.parsedJson;
+      return {
+        summary: parsed.summary || 'Engineering bridge active; evaluating system telemetry and error logs.',
+        focusArea: parsed.focusArea || 'Root Cause Isolation & Telemetry Analysis',
+        actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : ['Review server logs', 'Monitor failover health'],
+        lastUpdated: nowStr,
+      };
     }
+  } catch (e) {
+    console.error('generateLiveAINotes error:', e);
   }
 
   // Fallback if AI offline
