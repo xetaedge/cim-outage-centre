@@ -12,8 +12,8 @@ export async function GET(request: Request) {
     const baseUrl = `${proto}://${host}`;
     const redirectUri = `${baseUrl}/api/auth/sso/callback`;
 
-    const tenantId = creds.tenantId || 'common';
-    const clientId = creds.clientId;
+    const tenantId = creds.tenantId || process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e';
+    const clientId = creds.clientId || process.env.AZURE_CLIENT_ID || 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a';
 
     if (!clientId) {
       return NextResponse.json(

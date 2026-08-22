@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   try {
     const creds = await getTeamsCredentials();
     const redirectUri = `${baseUrl}/api/auth/sso/callback`;
-    const tenantId = creds.tenantId || 'common';
+    const tenantId = creds.tenantId || process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e';
 
     // 1. Exchange code for Graph API token
     const tokenRes = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
