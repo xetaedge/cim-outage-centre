@@ -52,7 +52,16 @@ export default function AdminSettingsPage() {
 
   // AI Configuration State (Plug & Play)
   const [aiKey, setAiKey] = useState('');
-  const [aiModel, setAiModel] = useState('gemini-flash-lite-latest');
+  const [aiModel, setAiModel] = useState('gemini-1.5-flash');
+  const [availableModels, setAvailableModels] = useState<any[]>([
+    { name: 'gemini-1.5-flash', displayName: 'gemini-1.5-flash (⚡ Fast & High Availability)', badge: 'Recommended' },
+    { name: 'gemini-1.5-flash-8b', displayName: 'gemini-1.5-flash-8b (High Capacity / Zero 503s)', badge: 'High Capacity' },
+    { name: 'gemini-2.0-flash-lite', displayName: 'gemini-2.0-flash-lite (Next-Gen Flash Lite)', badge: 'Next-Gen' },
+    { name: 'gemini-2.0-flash', displayName: 'gemini-2.0-flash (Next-Gen Full Speed)', badge: 'High Speed' },
+    { name: 'gemini-flash-lite-latest', displayName: 'gemini-flash-lite-latest (Standard Flash Lite)', badge: 'Lite' },
+    { name: 'gemini-1.5-pro', displayName: 'gemini-1.5-pro (Deep Strategic Analysis)', badge: 'Deep Reasoning' },
+  ]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   // Notification Module State
   const [bridgeRecipients, setBridgeRecipients] = useState('');
@@ -417,6 +426,32 @@ export default function AdminSettingsPage() {
       setAiTestResult({ success: false, message: 'Network test failed: ' + (err.message || 'Unknown error') });
     } finally {
       setTestingAiConnection(false);
+    }
+  };
+
+  const handleFetchModels = async () => {
+    if (!aiKey) {
+      alert('Please enter a Gemini API Key first.');
+      return;
+    }
+    setLoadingModels(true);
+    try {
+      const res = await fetch(`/api/ai/models?apiKey=${encodeURIComponent(aiKey)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.models) && data.models.length > 0) {
+        setAvailableModels(data.models);
+        addToast({
+          title: '✨ Loaded Google Models',
+          message: `Retrieved ${data.models.length} active models enabled for your API key.`,
+          type: 'update',
+        });
+      } else {
+        alert(data.error || 'Failed to fetch models list from Google.');
+      }
+    } catch (e: any) {
+      alert('Network error fetching models: ' + e.message);
+    } finally {
+      setLoadingModels(false);
     }
   };
 
@@ -1114,19 +1149,66 @@ export default function AdminSettingsPage() {
             </div>
 
             {/* AI Model selector */}
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">Generative AI Model</label>
-              <select
-                value={aiModel}
-                onChange={(e) => setAiModel(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-semibold focus:outline-none focus:border-yellow-500"
-              >
-                <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (⚡ Fast & Highly Reliable — Recommended)</option>
-                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Next-Gen 3.1 Flash Lite)</option>
-                <option value="gemini-flash-latest">gemini-flash-latest (Gemini 3.7 Flash Thinking Model)</option>
-                <option value="gemini-1.5-flash">gemini-1.5-flash (Gemini 1.5 Flash Stable)</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro (Gemini 1.5 Pro Deep Reasoning)</option>
-              </select>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-400 font-semibold">Generative AI Model Selection</label>
+                <button
+                  type="button"
+                  onClick={handleFetchModels}
+                  disabled={loadingModels || !aiKey}
+                  className="text-[11px] text-yellow-400 hover:text-yellow-300 font-medium flex items-center gap-1 disabled:opacity-50"
+                >
+                  {loadingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  <span>{loadingModels ? 'Loading...' : 'Scan Google API for Models'}</span>
+                </button>
+              </div>
+
+              {/* Quick Select Presets */}
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {[
+                  { id: 'gemini-1.5-flash', label: '⚡ 1.5 Flash (Recommended)' },
+                  { id: 'gemini-1.5-flash-8b', label: '🛡️ Flash-8B (High Capacity)' },
+                  { id: 'gemini-2.0-flash-lite', label: '🚀 2.0 Flash Lite' },
+                  { id: 'gemini-2.0-flash', label: '⚡ 2.0 Flash' },
+                  { id: 'gemini-1.5-pro', label: '🧠 1.5 Pro' },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setAiModel(preset.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all border ${
+                      aiModel === preset.id
+                        ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 font-bold shadow-sm'
+                        : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Dropdown with high-contrast options */}
+              <div className="relative">
+                <select
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-750 rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                >
+                  {availableModels.map((m: any) => (
+                    <option
+                      key={m.name}
+                      value={m.name}
+                      style={{ backgroundColor: '#090d16', color: '#ffffff' }}
+                      className="bg-slate-950 text-white py-1"
+                    >
+                      {m.displayName || m.name} {m.name === aiModel ? ' (Active)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono">
+                Currently selected model: <strong className="text-yellow-400">{aiModel}</strong>
+              </p>
             </div>
 
             {aiTestResult && (
