@@ -1148,67 +1148,202 @@ export default function AdminSettingsPage() {
               />
             </div>
 
-            {/* AI Model selector */}
-            <div className="space-y-2">
+            {/* Generative AI Model Selector with Comprehensive Models */}
+            <div className="space-y-3 pt-1">
               <div className="flex items-center justify-between">
-                <label className="block text-slate-400 font-semibold">Generative AI Model Selection</label>
+                <label className="block text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                  <span>Generative AI Model Selector</span>
+                  <span className="text-[10px] bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-md font-mono">
+                    Active: {aiModel}
+                  </span>
+                </label>
                 <button
                   type="button"
                   onClick={handleFetchModels}
                   disabled={loadingModels || !aiKey}
-                  className="text-[11px] text-yellow-400 hover:text-yellow-300 font-medium flex items-center gap-1 disabled:opacity-50"
+                  className="text-[11px] text-yellow-400 hover:text-yellow-300 font-semibold flex items-center gap-1 disabled:opacity-50 transition-colors"
                 >
-                  {loadingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                  <span>{loadingModels ? 'Loading...' : 'Scan Google API for Models'}</span>
+                  {loadingModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  <span>{loadingModels ? 'Scanning Google API...' : 'Live Scan Google Models'}</span>
                 </button>
               </div>
 
-              {/* Quick Select Presets */}
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {/* Visual Model Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {[
-                  { id: 'gemini-1.5-flash', label: '⚡ 1.5 Flash (Recommended)' },
-                  { id: 'gemini-1.5-flash-8b', label: '🛡️ Flash-8B (High Capacity)' },
-                  { id: 'gemini-2.0-flash-lite', label: '🚀 2.0 Flash Lite' },
-                  { id: 'gemini-2.0-flash', label: '⚡ 2.0 Flash' },
-                  { id: 'gemini-1.5-pro', label: '🧠 1.5 Pro' },
-                ].map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => setAiModel(preset.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all border ${
-                      aiModel === preset.id
-                        ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 font-bold shadow-sm'
-                        : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+                  {
+                    id: 'gemini-1.5-flash',
+                    title: 'Gemini 1.5 Flash',
+                    badge: 'Recommended',
+                    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                    desc: 'Fast, high-throughput, general purpose operations synthesis.',
+                    icon: '⚡',
+                  },
+                  {
+                    id: 'gemini-1.5-flash-8b',
+                    title: 'Gemini 1.5 Flash-8B',
+                    badge: 'High Capacity',
+                    badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+                    desc: 'Lightweight, ultra-low latency, immune to 503 capacity spikes.',
+                    icon: '🛡️',
+                  },
+                  {
+                    id: 'gemini-2.0-flash-lite',
+                    title: 'Gemini 2.0 Flash Lite',
+                    badge: 'Next-Gen',
+                    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+                    desc: 'Next-generation cost-efficient high speed multimodal engine.',
+                    icon: '🚀',
+                  },
+                  {
+                    id: 'gemini-2.0-flash',
+                    title: 'Gemini 2.0 Flash',
+                    badge: 'High Speed',
+                    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                    desc: 'Next-generation production model with enhanced coding & reasoning.',
+                    icon: '⚡',
+                  },
+                  {
+                    id: 'gemini-1.5-pro',
+                    title: 'Gemini 1.5 Pro',
+                    badge: 'Deep Reasoning',
+                    badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+                    desc: '2M context window. Ideal for complex Root Cause Analysis (RCA).',
+                    icon: '🧠',
+                  },
+                  {
+                    id: 'gemini-flash-latest',
+                    title: 'Gemini Flash (Latest)',
+                    badge: 'Auto-Update',
+                    badgeColor: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+                    desc: 'Always uses the latest stable Gemini Flash model release.',
+                    icon: '💡',
+                  },
+                ].map((m) => {
+                  const isSelected = aiModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setAiModel(m.id)}
+                      className={`p-3 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-yellow-500/15 border-yellow-500 shadow-md shadow-yellow-500/10'
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1 mb-1">
+                        <div className="font-bold text-white flex items-center gap-1.5 text-xs">
+                          <span>{m.icon}</span>
+                          <span>{m.title}</span>
+                        </div>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono border font-semibold ${m.badgeColor}`}>
+                          {m.badge}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-snug line-clamp-2">{m.desc}</p>
+                      <p className="text-[9px] font-mono text-slate-500 mt-2">
+                        ID: <code className={isSelected ? 'text-yellow-300 font-bold' : 'text-slate-400'}>{m.id}</code>
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Dropdown with high-contrast options */}
-              <div className="relative">
-                <select
+              {/* Complete All-Models Dropdown (Static + Dynamic) */}
+              <div className="space-y-1 pt-1">
+                <label className="block text-slate-400 text-[11px] font-semibold">
+                  Or select from complete list of all supported Gemini models:
+                </label>
+                <div className="relative">
+                  <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white font-mono text-xs focus:outline-none focus:border-yellow-500 cursor-pointer"
+                    style={{ backgroundColor: '#030712', color: '#ffffff' }}
+                  >
+                    <optgroup label="🌟 Gemini 1.5 Models (Production Stable)" style={{ backgroundColor: '#0f172a', color: '#38bdf8' }}>
+                      <option value="gemini-1.5-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-1.5-flash — Gemini 1.5 Flash (Recommended)
+                      </option>
+                      <option value="gemini-1.5-flash-8b" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-1.5-flash-8b — Gemini 1.5 Flash-8B (High Capacity / Zero 503s)
+                      </option>
+                      <option value="gemini-1.5-flash-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-1.5-flash-latest — Gemini 1.5 Flash Latest
+                      </option>
+                      <option value="gemini-1.5-pro" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-1.5-pro — Gemini 1.5 Pro (Deep Strategic Analysis)
+                      </option>
+                      <option value="gemini-1.5-pro-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-1.5-pro-latest — Gemini 1.5 Pro Latest
+                      </option>
+                    </optgroup>
+
+                    <optgroup label="🚀 Gemini 2.0 Models (Next-Gen High Performance)" style={{ backgroundColor: '#0f172a', color: '#c084fc' }}>
+                      <option value="gemini-2.0-flash" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-2.0-flash — Gemini 2.0 Flash (Next-Gen Production)
+                      </option>
+                      <option value="gemini-2.0-flash-lite" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-2.0-flash-lite — Gemini 2.0 Flash Lite (Cost-Efficient)
+                      </option>
+                      <option value="gemini-2.0-flash-exp" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-2.0-flash-exp — Gemini 2.0 Flash Experimental
+                      </option>
+                      <option value="gemini-2.0-pro-exp-02-05" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-2.0-pro-exp-02-05 — Gemini 2.0 Pro Experimental
+                      </option>
+                    </optgroup>
+
+                    <optgroup label="💡 Specialized & Auto-Tracking Model Aliases" style={{ backgroundColor: '#0f172a', color: '#fde047' }}>
+                      <option value="gemini-flash-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-flash-latest — Gemini Flash Latest
+                      </option>
+                      <option value="gemini-flash-lite-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-flash-lite-latest — Gemini Flash Lite Latest
+                      </option>
+                      <option value="gemini-pro-latest" style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                        gemini-pro-latest — Gemini Pro Latest
+                      </option>
+                    </optgroup>
+
+                    {/* Dynamically loaded models from Google API if scanned */}
+                    {availableModels.filter(m => ![
+                      'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.5-pro-latest',
+                      'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-exp', 'gemini-2.0-pro-exp-02-05',
+                      'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'
+                    ].includes(m.name)).length > 0 && (
+                      <optgroup label="🌐 Additional Models Discovered via Google API" style={{ backgroundColor: '#0f172a', color: '#4ade80' }}>
+                        {availableModels
+                          .filter(m => ![
+                            'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.5-pro-latest',
+                            'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash-exp', 'gemini-2.0-pro-exp-02-05',
+                            'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'
+                          ].includes(m.name))
+                          .map((m: any) => (
+                            <option key={m.name} value={m.name} style={{ backgroundColor: '#030712', color: '#ffffff' }}>
+                              {m.displayName || m.name} ({m.name})
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Custom Model ID Input */}
+              <div className="pt-1">
+                <label className="block text-slate-500 text-[10px] mb-1 font-mono">
+                  Custom Model Identifier (type directly if using a fine-tuned or custom endpoint):
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. gemini-1.5-flash-002"
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-750 rounded-xl p-2.5 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
-                >
-                  {availableModels.map((m: any) => (
-                    <option
-                      key={m.name}
-                      value={m.name}
-                      style={{ backgroundColor: '#090d16', color: '#ffffff' }}
-                      className="bg-slate-950 text-white py-1"
-                    >
-                      {m.displayName || m.name} {m.name === aiModel ? ' (Active)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-yellow-300 font-mono focus:outline-none focus:border-yellow-500"
+                />
               </div>
-              <p className="text-[10px] text-slate-500 font-mono">
-                Currently selected model: <strong className="text-yellow-400">{aiModel}</strong>
-              </p>
             </div>
 
             {aiTestResult && (
