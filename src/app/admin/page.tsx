@@ -57,6 +57,10 @@ export default function AdminSettingsPage() {
   // Notification Module State
   const [bridgeRecipients, setBridgeRecipients] = useState('');
   const [cimUpdateRecipients, setCimUpdateRecipients] = useState('');
+  const [senderEmail, setSenderEmail] = useState('shivam@xetainteractives.com');
+  const [testEmailRecipient, setTestEmailRecipient] = useState('shivam@xetainteractives.com');
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [testingConnection, setTestingConnection] = useState(false);
@@ -111,6 +115,10 @@ export default function AdminSettingsPage() {
         if (s.AI_MODEL) setAiModel(s.AI_MODEL);
         if (s.BRIDGE_RECIPIENTS) setBridgeRecipients(s.BRIDGE_RECIPIENTS);
         if (s.CIM_UPDATE_RECIPIENTS) setCimUpdateRecipients(s.CIM_UPDATE_RECIPIENTS);
+        if (s.GRAPH_SENDER_EMAIL) {
+          setSenderEmail(s.GRAPH_SENDER_EMAIL);
+          setTestEmailRecipient(s.GRAPH_SENDER_EMAIL);
+        }
       }
     } catch (e) {
       console.error('Failed to load settings:', e);
@@ -456,6 +464,7 @@ export default function AdminSettingsPage() {
             { key: 'AI_MODEL', value: aiModel },
             { key: 'BRIDGE_RECIPIENTS', value: bridgeRecipients },
             { key: 'CIM_UPDATE_RECIPIENTS', value: cimUpdateRecipients },
+            { key: 'GRAPH_SENDER_EMAIL', value: senderEmail },
           ],
         }),
       });
@@ -472,6 +481,44 @@ export default function AdminSettingsPage() {
       alert('Failed to save settings');
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmailRecipient) {
+      alert('Please enter a recipient email address for testing.');
+      return;
+    }
+    setTestingEmail(true);
+    setEmailTestResult(null);
+    try {
+      const res = await fetch('/api/admin/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: testEmailRecipient }),
+      });
+      const data = await res.json();
+      setEmailTestResult(data);
+      if (data.success) {
+        addToast({
+          title: '📧 Test Email Sent',
+          message: `Dispatched test email to ${testEmailRecipient}`,
+          type: 'update',
+        });
+      } else {
+        addToast({
+          title: '❌ Email Delivery Failed',
+          message: data.message || 'Check Graph API permissions or credentials',
+          type: 'error',
+        });
+      }
+    } catch (err: any) {
+      setEmailTestResult({
+        success: false,
+        message: err.message || 'Network error executing email test.',
+      });
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -1224,9 +1271,26 @@ export default function AdminSettingsPage() {
 
           <div className="space-y-4 text-xs">
             <div>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                <span>Microsoft Graph Sender Mailbox</span>
+                <span className="text-[10px] text-blue-400 font-normal">Must have Exchange Online mailbox</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  placeholder="shivam@xetainteractives.com"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 pl-8 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-accent"
+                />
+                <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-3" />
+              </div>
+            </div>
+
+            <div>
               <label className="block text-slate-400 font-semibold mb-1">Bridge Invite Recipients</label>
               <textarea
-                rows={3}
+                rows={2}
                 placeholder="List of email IDs to receive Teams Bridge invitations..."
                 value={bridgeRecipients}
                 onChange={(e) => setBridgeRecipients(e.target.value)}
@@ -1237,7 +1301,7 @@ export default function AdminSettingsPage() {
             <div>
               <label className="block text-slate-400 font-semibold mb-1">CIM Update Recipients</label>
               <textarea
-                rows={3}
+                rows={2}
                 placeholder="List of email IDs to receive ongoing CIM updates..."
                 value={cimUpdateRecipients}
                 onChange={(e) => setCimUpdateRecipients(e.target.value)}
@@ -1251,8 +1315,74 @@ export default function AdminSettingsPage() {
               className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-xs font-bold rounded-xl shadow-glowBlue transition-all flex items-center justify-center space-x-2"
             >
               {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              <span>Save Notification Recipients</span>
+              <span>Save Notification Settings</span>
             </button>
+
+            {/* Test Email Delivery Section */}
+            <div className="pt-3 border-t border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-300 flex items-center gap-1.5 text-xs">
+                  <Mail className="w-3.5 h-3.5 text-blue-400" />
+                  Test Microsoft Graph Email Delivery
+                </span>
+                <span className="text-[10px] text-slate-500">Uses Graph /users/{`{sender}`}/sendMail</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="email"
+                  placeholder="Recipient email (e.g. shivam@xetainteractives.com)"
+                  value={testEmailRecipient}
+                  onChange={(e) => setTestEmailRecipient(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-750 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-accent font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleTestEmail}
+                  disabled={testingEmail}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                >
+                  {testingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                  <span>{testingEmail ? 'Sending...' : 'Send Test Email'}</span>
+                </button>
+              </div>
+
+              {emailTestResult && (
+                <div className={`p-3 rounded-xl border text-xs space-y-2 animate-fadeIn ${
+                  emailTestResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : 'bg-red-500/10 border-red-500/30 text-red-300'
+                }`}>
+                  <div className="font-bold flex items-center gap-1.5">
+                    {emailTestResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-red-400" />
+                    )}
+                    <span>{emailTestResult.message}</span>
+                  </div>
+
+                  {emailTestResult.hint && (
+                    <div className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg text-[11px] text-yellow-300 font-sans">
+                      💡 <strong>Action Required:</strong> {emailTestResult.hint}
+                    </div>
+                  )}
+
+                  {emailTestResult.steps && (
+                    <div className="space-y-1 pt-1 font-mono text-[10px] text-slate-400">
+                      {emailTestResult.steps.map((st: any, i: number) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <span className={st.status === 'ok' ? 'text-emerald-400' : 'text-red-400'}>
+                            {st.status === 'ok' ? '✔' : '✖'}
+                          </span>
+                          <span><strong>{st.step}:</strong> {st.details}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
