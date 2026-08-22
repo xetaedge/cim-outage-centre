@@ -8,20 +8,28 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const testRecipient = body.recipient || 'shivam@xetainteractives.com';
+    const testRecipient = (body.recipient || 'shivam@xetainteractives.com').trim();
 
-    // Step 1: Configuration check
+    // Step 1: Configuration check with request overrides
     const config = await getEmailConfig();
+    const clientId = (body.clientId || config.clientId || '').trim();
+    const clientSecret = (body.clientSecret || config.clientSecret || '').trim();
+    let tenantId = (body.tenantId || config.tenantId || '').trim();
+    if (!tenantId || tenantId === 'common') {
+      tenantId = process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e';
+    }
+    const senderEmail = (body.senderEmail || config.senderEmail || 'shivam@xetainteractives.com').trim();
+
     steps.push({
       step: '1. Resolve Configuration',
-      status: config.clientId && config.clientSecret ? 'ok' : 'error',
-      details: `Client ID: ${config.clientId} | Tenant: ${config.tenantId} | Sender: ${config.senderEmail} | Secret present: ${Boolean(config.clientSecret)}`,
+      status: clientId && clientSecret ? 'ok' : 'error',
+      details: `Client ID: ${clientId} | Tenant: ${tenantId} | Sender: ${senderEmail} | Secret Length: ${clientSecret.length} chars`,
     });
 
-    if (!config.clientSecret) {
+    if (!clientSecret) {
       return NextResponse.json({
         success: false,
-        message: 'AZURE_CLIENT_SECRET is missing. Please set it in Vercel Environment Variables or Admin Settings.',
+        message: 'AZURE_CLIENT_SECRET is missing. Please enter it in the Client Secret field above or set it in Vercel Environment Variables.',
         steps,
       });
     }
@@ -29,11 +37,35 @@ export async function POST(request: Request) {
     // Step 2: Acquire OAuth Token
     let token = '';
     try {
-      token = await getGraphToken();
+      const tokenBody = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: 'https://graph.microsoft.com/.default',
+        grant_type: 'client_credentials',
+      });
+
+      const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+      const tokenRes = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: tokenBody.toString(),
+      });
+
+      if (!tokenRes.ok) {
+        const err = await tokenRes.text();
+        throw new Error(`Failed to acquire Microsoft Graph OAuth token (${tokenRes.status}): ${err}`);
+      }
+
+      const tokenData = await tokenRes.json();
+      if (!tokenData.access_token) {
+        throw new Error('Token endpoint did not return an access_token.');
+      }
+      token = tokenData.access_token;
+
       steps.push({
         step: '2. Acquire Microsoft Graph Token',
         status: 'ok',
-        details: `Access Token acquired (prefix: ${token.substring(0, 15)}...)`,
+        details: `Access Token acquired successfully (prefix: ${token.substring(0, 15)}...)`,
       });
     } catch (tokenErr: any) {
       steps.push({

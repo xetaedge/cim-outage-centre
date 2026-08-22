@@ -495,7 +495,13 @@ export default function AdminSettingsPage() {
       const res = await fetch('/api/admin/email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient: testEmailRecipient }),
+        body: JSON.stringify({
+          recipient: testEmailRecipient,
+          clientId: teamsClientId,
+          clientSecret: teamsClientSecret,
+          tenantId: teamsTenantId,
+          senderEmail: senderEmail,
+        }),
       });
       const data = await res.json();
       setEmailTestResult(data);
