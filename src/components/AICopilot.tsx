@@ -547,6 +547,22 @@ export const AICopilot: React.FC = () => {
             ))}
 
             <SuggestionChip
+              icon={<Zap className="w-3 h-3" />}
+              label="ServiceNow INC0000060"
+              colorClass="bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+              borderClass="border border-emerald-500/25 hover:border-emerald-400/40"
+              onClick={() => handleSendMessage('Check incident INC0000060 in ServiceNow directly via MCP')}
+            />
+
+            <SuggestionChip
+              icon={<Activity className="w-3 h-3" />}
+              label="ServiceNow Changes"
+              colorClass="bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
+              borderClass="border border-cyan-500/25 hover:border-cyan-400/40"
+              onClick={() => handleSendMessage('What are the recent change requests in ServiceNow?')}
+            />
+
+            <SuggestionChip
               icon={<MapPin className="w-3 h-3" />}
               label="Victorville"
               colorClass="bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"

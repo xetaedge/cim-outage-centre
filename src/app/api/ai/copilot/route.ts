@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getGeminiConfig, callGeminiAPI } from '@/lib/gemini';
+import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,6 @@ export const dynamic = 'force-dynamic';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Emoji badge for incident priority */
 function priorityEmoji(p: string): string {
   switch (p) {
     case 'P1': return '🔴';
@@ -19,7 +19,6 @@ function priorityEmoji(p: string): string {
   }
 }
 
-/** Emoji badge for incident status */
 function statusEmoji(s: string): string {
   switch (s) {
     case 'INVESTIGATING': return '🔍';
@@ -31,7 +30,6 @@ function statusEmoji(s: string): string {
   }
 }
 
-/** Format a Date for display (or return fallback) */
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return '—';
   const dt = typeof d === 'string' ? new Date(d) : d;
@@ -45,7 +43,6 @@ function fmtDate(d: Date | string | null | undefined): string {
   });
 }
 
-/** Build a clean, cohesive narrative from update comments */
 function buildProgressNarrative(
   updates: { comment: string }[],
   assignmentGroup: string,
@@ -62,6 +59,98 @@ function buildProgressNarrative(
     .filter(Boolean);
 
   return `Engineering teams have completed initial triage and are actively progressing remediation. Key actions so far: ${cleaned.join('. ')}.`;
+}
+
+/**
+ * Executes ServiceNow MCP tools on demand for AI Copilot queries
+ */
+async function executeServiceNowMCPTool(query: string): Promise<{ toolUsed: string; resultText: string } | null> {
+  const lower = query.toLowerCase();
+
+  try {
+    // 1. Single Incident Query (INC... or sys_id)
+    const incMatch = query.match(/\b(INC\d{5,}|[0-9a-f]{32})\b/i);
+    if (incMatch && (lower.includes('servicenow') || lower.includes('sn') || lower.includes('ticket') || lower.includes('fetch') || lower.includes('check'))) {
+      const incNum = incMatch[1].toUpperCase();
+      const isSysId = /^[0-9a-f]{32}$/i.test(incNum);
+      const queryParam = isSysId ? `sys_id=${incNum}` : `number=${incNum}`;
+      const res = await fetchServiceNowAPI(`/api/now/table/incident?sysparm_query=${queryParam}&sysparm_display_value=true&sysparm_limit=1`);
+      
+      if (res.ok) {
+        const json = await res.json();
+        if (json.result && json.result.length > 0) {
+          const item = json.result[0];
+          return {
+            toolUsed: 'servicenow_get_incident',
+            resultText: `ServiceNow Live Incident Record:
+Number: ${item.number?.display_value || item.number}
+Short Description: ${item.short_description?.display_value || item.short_description}
+State: ${item.state?.display_value || item.state}
+Priority: ${item.priority?.display_value || item.priority}
+Assignment Group: ${item.assignment_group?.display_value || item.assignment_group || 'Unassigned'}
+Assigned To: ${item.assigned_to?.display_value || item.assigned_to || 'Unassigned'}
+Configuration Item (CI): ${item.cmdb_ci?.display_value || item.cmdb_ci || 'None'}
+Opened: ${item.opened_at?.display_value || item.opened_at}
+Work Notes / Activity: ${item.work_notes?.display_value || item.work_notes || 'None'}
+Close Notes: ${item.close_notes?.display_value || item.close_notes || 'None'}`,
+          };
+        }
+      }
+    }
+
+    // 2. Change Requests Query
+    if (lower.includes('change') || lower.includes('deployment') || lower.includes('release') || lower.includes('chg')) {
+      const res = await fetchServiceNowAPI('/api/now/table/change_request?sysparm_query=ORDERBYDESCsys_created_on&sysparm_limit=5&sysparm_display_value=true');
+      if (res.ok) {
+        const json = await res.json();
+        const changes = json.result || [];
+        if (changes.length > 0) {
+          const chgList = changes.map((c: any) => `- ${c.number?.display_value || c.number}: ${c.short_description?.display_value || c.short_description} (Risk: ${c.risk?.display_value || c.risk}, State: ${c.state?.display_value || c.state}, Created: ${c.sys_created_on?.display_value || c.sys_created_on})`).join('\n');
+          return {
+            toolUsed: 'servicenow_get_change_requests',
+            resultText: `ServiceNow Recent Change Requests:\n${chgList}`,
+          };
+        }
+      }
+    }
+
+    // 3. Knowledge Base Query
+    if (lower.includes('kb') || lower.includes('knowledge') || lower.includes('runbook') || lower.includes('playbook') || lower.includes('sop') || lower.includes('how to')) {
+      const cleanQ = encodeURIComponent(query.replace(/(search|find|kb|knowledge|base|runbook|playbook|servicenow)/gi, '').trim() || 'incident');
+      const res = await fetchServiceNowAPI(`/api/now/table/kb_knowledge?sysparm_query=workflow_state=published^short_descriptionLIKE${cleanQ}^ORtextLIKE${cleanQ}&sysparm_limit=3&sysparm_display_value=true`);
+      if (res.ok) {
+        const json = await res.json();
+        const articles = json.result || [];
+        if (articles.length > 0) {
+          const kbList = articles.map((a: any) => `- ${a.number?.display_value || a.number}: ${a.short_description?.display_value || a.short_description} (Topic: ${a.topic?.display_value || a.topic})`).join('\n');
+          return {
+            toolUsed: 'servicenow_search_kb',
+            resultText: `ServiceNow Knowledge Base Articles Matching Query:\n${kbList}`,
+          };
+        }
+      }
+    }
+
+    // 4. List Active P1 / Incidents in ServiceNow
+    if ((lower.includes('servicenow') || lower.includes('sn')) && (lower.includes('list') || lower.includes('open') || lower.includes('p1') || lower.includes('all incidents'))) {
+      const res = await fetchServiceNowAPI('/api/now/table/incident?sysparm_query=active=true^ORDERBYDESCopened_at&sysparm_limit=5&sysparm_display_value=true');
+      if (res.ok) {
+        const json = await res.json();
+        const incs = json.result || [];
+        if (incs.length > 0) {
+          const incList = incs.map((i: any) => `- ${i.number?.display_value || i.number} [${i.priority?.display_value || i.priority}] - ${i.short_description?.display_value || i.short_description} (${i.state?.display_value || i.state}, Group: ${i.assignment_group?.display_value || i.assignment_group || 'Unassigned'})`).join('\n');
+          return {
+            toolUsed: 'servicenow_list_incidents',
+            resultText: `Live ServiceNow Active Incidents:\n${incList}`,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[AI Copilot MCP] Autonomous tool execution notice:', err);
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,9 +176,9 @@ export async function POST(request: Request) {
     const lower = query.toLowerCase();
 
     // -----------------------------------------------------------------
-    // 1. Fetch all data in parallel (including closed / archived)
+    // 1. Parallel Data Fetch: DB Telemetry + Autonomous ServiceNow MCP
     // -----------------------------------------------------------------
-    const [allIncidents, historicalIncidents, sites, aiConfig] = await Promise.all([
+    const [allIncidents, historicalIncidents, sites, aiConfig, snConfig, mcpData] = await Promise.all([
       prisma.incident.findMany({
         include: {
           updates: { orderBy: { updateNumber: 'asc' } },
@@ -102,6 +191,8 @@ export async function POST(request: Request) {
         include: { incidents: { include: { incident: true } } },
       }),
       getGeminiConfig(),
+      getServiceNowConfig(),
+      executeServiceNowMCPTool(query),
     ]);
 
     const activeIncidents = allIncidents.filter((i) => i.status !== 'CLOSED');
@@ -109,7 +200,7 @@ export async function POST(request: Request) {
     const { apiKey, model } = aiConfig;
 
     // -----------------------------------------------------------------
-    // 2. Attempt Gemini API (using DB-configured key & model with auto-fallback)
+    // 2. Gemini AI Processing with Live ServiceNow MCP Context
     // -----------------------------------------------------------------
     if (apiKey) {
       try {
@@ -118,6 +209,8 @@ export async function POST(request: Request) {
           closedIncidents,
           sites,
           historicalIncidents,
+          mcpData,
+          snConfig.instanceUrl,
         );
 
         let fullPrompt = query;
@@ -128,15 +221,24 @@ export async function POST(request: Request) {
           fullPrompt = `[Previous Conversation]\n${formattedHistory}\n\n[Current User Question]\n${query}`;
         }
 
+        if (mcpData) {
+          fullPrompt += `\n\n[⚡ Live ServiceNow MCP Tool Telemetry (${mcpData.toolUsed})]\n${mcpData.resultText}`;
+        }
+
         const result = await callGeminiAPI({
           prompt: fullPrompt,
           systemPrompt,
-          temperature: 0.5,
+          temperature: 0.4,
           maxOutputTokens: 2048,
         });
 
         if (result.text) {
-          return NextResponse.json({ success: true, response: result.text, modelUsed: result.modelUsed });
+          return NextResponse.json({
+            success: true,
+            response: result.text,
+            modelUsed: result.modelUsed,
+            mcpToolUsed: mcpData?.toolUsed || null,
+          });
         }
       } catch (err) {
         console.warn('[AI Copilot] Gemini call failed — falling back to local engine:', err);
@@ -144,7 +246,7 @@ export async function POST(request: Request) {
     }
 
     // -----------------------------------------------------------------
-    // 3. Local Fallback Engine (rich markdown responses)
+    // 3. Fallback Engine with Live MCP Enrichment
     // -----------------------------------------------------------------
     const botReply = generateFallbackResponse(
       query,
@@ -154,9 +256,14 @@ export async function POST(request: Request) {
       closedIncidents,
       sites,
       historicalIncidents,
+      mcpData,
     );
 
-    return NextResponse.json({ success: true, response: botReply });
+    return NextResponse.json({
+      success: true,
+      response: botReply,
+      mcpToolUsed: mcpData?.toolUsed || null,
+    });
   } catch (err: any) {
     console.error('[AI Copilot] Unhandled error:', err);
     return NextResponse.json(
@@ -175,8 +282,9 @@ function buildSystemPrompt(
   closedIncidents: any[],
   sites: any[],
   historicalIncidents: any[],
+  mcpData: { toolUsed: string; resultText: string } | null,
+  snInstanceUrl: string,
 ): string {
-  // -- Active incidents context
   const activeCtx = activeIncidents.map((i) => ({
     number: i.number,
     title: i.shortDescription,
@@ -198,21 +306,17 @@ function buildSystemPrompt(
     })),
   }));
 
-  // -- Recently closed incidents context (last 20)
   const closedCtx = closedIncidents.slice(0, 20).map((i) => ({
     number: i.number,
     title: i.shortDescription,
     priority: i.priority,
     status: i.status,
     group: i.assignmentGroup,
-    cti: i.cti || null,
-    cmdbCi: i.cmdbCi || null,
     openedAt: i.openedAt,
     closedAt: i.closedAt,
     sites: i.sites.map((s: any) => s.site.name),
   }));
 
-  // -- Sites context
   const siteCtx = sites.map((s) => ({
     name: s.name,
     city: s.city,
@@ -223,7 +327,6 @@ function buildSystemPrompt(
       .map((r: any) => r.incident.number),
   }));
 
-  // -- Historical knowledge base
   const histCtx = historicalIncidents.map((h) => ({
     title: h.title,
     category: h.category,
@@ -231,35 +334,29 @@ function buildSystemPrompt(
     rootCause: h.rootCause,
   }));
 
-  return `You are a warm, highly knowledgeable AI Command Copilot for the Critical Incident Management (CIM) Portal — an enterprise IT operations dashboard.
+  return `You are a warm, highly knowledgeable AI Command Copilot for the Critical Incident Management (CIM) Portal — an enterprise IT operations dashboard integrated with live ServiceNow Model Context Protocol (MCP) tools.
 
-## YOUR PERSONALITY
-- Warm, professional, and conversational — like a trusted senior operations lead
-- Confident and concise; never verbose for the sake of it
-- Use emoji sparingly but effectively for visual anchoring:
-  📍 locations · 🔴 P1/critical · 🟠 P2 · 🟡 P3 · 🟢 P4/healthy · ✅ resolved · 🏁 closed · 🔍 investigating · 📡 monitoring
+## CAPABILITIES & SERVICENOW MCP INTEGRATION
+- Connected to Live ServiceNow Instance: ${snInstanceUrl}
+- You have autonomous access to ServiceNow MCP tools (servicenow_get_incident, servicenow_list_incidents, servicenow_search_kb, servicenow_get_change_requests, servicenow_create_incident, servicenow_update_incident).
+- When answering questions about ServiceNow tickets, changes, or runbooks, reference live telemetry clearly with visual markdown badges.
+
+## YOUR PERSONALITY & STYLE
+- Warm, professional, and conversational — senior IT Incident Commander
+- Confident, structured, and scannable
+- Emoji anchoring: 📍 locations · 🔴 P1 · 🟠 P2 · 🟡 P3 · 🟢 P4 · ✅ resolved · 🏁 closed · 🔍 investigating · 📡 monitoring · ⚡ MCP live data
 
 ## FORMATTING RULES (MANDATORY)
-- Always respond with well-structured, beautifully formatted **markdown**
+- Always respond in well-structured **markdown**
 - Use \`###\` headers to separate distinct sections
-- Use \`**bold**\` for all key data points: incident numbers, statuses, assignment groups, priorities, site names
-- Use \`- \` bullet lists when presenting multi-item data
-- Use \`> \` blockquotes for executive summaries or key insights
-- When providing bridge/Teams links, format as clickable markdown: \`[Join Command Bridge](url)\`
-- For incident summaries, create a **cohesive narrative** of progress — NEVER list raw "Update #1: ..., Update #2: ..." sequences
-- Keep responses scannable: use whitespace and structure generously
+- Use \`**bold**\` for all incident numbers, statuses, groups, priorities, and site names
+- Format bridge links as: \`[Join Command Bridge](url)\`
+- Use bullet points for actions and timeline summaries
 
-## SEMANTIC MATCHING
-- Match user queries semantically — they do NOT need to use exact names, IDs, or phrasing
-- "Chicago", "what is happening in chicago", "any outages in Chicago?" → identify Chicago-related sites and incidents
-- "INC0010001", "10001", "incident 10001" → fuzzy-match the incident number
-- "bridge for INC0010001", "Teams link" → extract incident and provide the Teams bridge link
-- "how many incidents", "count active" → provide counts with breakdown
-- "executive summary", "brief me" → provide a high-level overview
+${mcpData ? `### ⚡ Live ServiceNow MCP Telemetry Active\nTool Used: ${mcpData.toolUsed}\nData:\n${mcpData.resultText}\n` : ''}
 
-## REAL-TIME DATABASE CONTEXT
-
-### Active Incidents (${activeIncidents.length})
+## REAL-TIME CIM PORTAL CONTEXT
+### Active Portal Incidents (${activeIncidents.length})
 ${JSON.stringify(activeCtx, null, 1)}
 
 ### Recently Closed Incidents (${closedCtx.length})
@@ -284,8 +381,25 @@ function generateFallbackResponse(
   closedIncidents: any[],
   sites: any[],
   historicalIncidents: any[],
+  mcpData: { toolUsed: string; resultText: string } | null,
 ): string {
-  // ------- Extract potential incident number -------
+  // If MCP Tool returned live data, format and return it prominently!
+  if (mcpData) {
+    return (
+      `### ⚡ Live ServiceNow Response (via MCP)
+
+` +
+      `> **Tool**: \`${mcpData.toolUsed}\` · Synchronized with live ServiceNow REST API.
+
+` +
+      `${mcpData.resultText}
+
+` +
+      `*You can ask me to update this ticket, fetch related change requests, or search knowledge base runbooks.*`
+    );
+  }
+
+  // Extract potential incident number
   const numberMatch = lower.match(/\b(?:inc)?(0*\d{4,})\b/i);
   let matchedIncident: any = null;
 
@@ -296,7 +410,7 @@ function generateFallbackResponse(
     );
   }
 
-  // ------- Identify location / site -------
+  // Identify location / site
   const matchedSite = sites.find(
     (s: any) =>
       lower.includes(s.city.toLowerCase()) ||
@@ -308,9 +422,7 @@ function generateFallbackResponse(
         .some((word: string) => word.length > 3 && lower.includes(word)),
   );
 
-  // =====================================================================
   // Pattern: Executive Summary / Brief Me
-  // =====================================================================
   if (
     lower.includes('executive summary') ||
     lower.includes('brief me') ||
@@ -348,32 +460,24 @@ function generateFallbackResponse(
     );
   }
 
-  // =====================================================================
   // Pattern: How many incidents / count
-  // =====================================================================
   if (
     lower.includes('how many') ||
     lower.includes('count') ||
     lower.includes('total incidents') ||
     lower.includes('number of incidents')
   ) {
-    const total = allIncidents.length;
-    const active = activeIncidents.length;
-    const closed = closedIncidents.length;
-
     return (
       `### 📈 Incident Statistics\n\n` +
-      `- **Total Incidents**: ${total}\n` +
-      `- **Active**: ${active}\n` +
-      `- **Closed / Resolved**: ${closed}\n\n` +
-      `> Currently tracking **${active} active incident${active !== 1 ? 's' : ''}** requiring attention.\n\n` +
+      `- **Total Incidents**: ${allIncidents.length}\n` +
+      `- **Active**: ${activeIncidents.length}\n` +
+      `- **Closed / Resolved**: ${closedIncidents.length}\n\n` +
+      `> Currently tracking **${activeIncidents.length} active incident${activeIncidents.length !== 1 ? 's' : ''}** requiring attention.\n\n` +
       `*Ask me about any specific incident number for a full briefing.*`
     );
   }
 
-  // =====================================================================
   // Pattern: List all active incidents
-  // =====================================================================
   if (
     lower.includes('list all active') ||
     lower.includes('list active') ||
@@ -405,9 +509,7 @@ function generateFallbackResponse(
     );
   }
 
-  // =====================================================================
   // Pattern: Bridge / Teams link
-  // =====================================================================
   if (
     lower.includes('bridge') ||
     lower.includes('teams link') ||
@@ -432,83 +534,10 @@ function generateFallbackResponse(
         `Incident **${target.number}** does not currently have a Teams bridge link configured.\n\n` +
         `Please ask the Incident Manager to provision a bridge via the dashboard.`
       );
-    } else {
-      return (
-        `### 📞 Bridge Status\n\n` +
-        `No active incidents found to link a command bridge. All systems appear operational!`
-      );
     }
   }
 
-  // =====================================================================
-  // Pattern: What priority is INC...? / Priority query
-  // =====================================================================
-  if (matchedIncident && (lower.includes('priority') || lower.includes('what priority'))) {
-    const inc = matchedIncident;
-    return (
-      `### ${priorityEmoji(inc.priority)} Priority for ${inc.number}\n\n` +
-      `- **Incident**: ${inc.shortDescription}\n` +
-      `- **Priority**: **${inc.priority}**\n` +
-      `- **Status**: ${statusEmoji(inc.status)} **${inc.status}**\n` +
-      `- **Assignment Group**: **${inc.assignmentGroup}**\n` +
-      (inc.cti ? `- **CTI**: ${inc.cti}\n` : '') +
-      (inc.cmdbCi ? `- **CMDB CI**: ${inc.cmdbCi}\n` : '') +
-      `\n*Opened ${fmtDate(inc.openedAt)}${inc.closedAt ? ` · Closed ${fmtDate(inc.closedAt)}` : ''}*`
-    );
-  }
-
-  // =====================================================================
-  // Pattern: Location / site query
-  // =====================================================================
-  if (
-    matchedSite ||
-    lower.includes('location') ||
-    lower.includes('city') ||
-    lower.includes('site') ||
-    lower.includes('facility')
-  ) {
-    const site = matchedSite || sites[0];
-    if (site) {
-      const activeRels = site.incidents.filter((r: any) => r.incident.status !== 'CLOSED');
-      if (activeRels.length > 0) {
-        let incLines = '';
-        for (const rel of activeRels) {
-          const inc = rel.incident;
-          incLines += `- ${priorityEmoji(inc.priority)} **${inc.number}** — ${inc.shortDescription} · **${inc.status}**\n`;
-        }
-
-        return (
-          `### 📍 Location Status — ${site.name}\n\n` +
-          `- **City**: ${site.city}\n` +
-          `- **Country**: ${site.country}\n` +
-          `- **Status**: 🟠 **IMPACTED**\n` +
-          `- **Active Incidents**: ${activeRels.length}\n\n` +
-          `${incLines}\n` +
-          `Remediation teams are actively working to restore full operations at this facility.`
-        );
-      } else {
-        return (
-          `### 📍 Location Status — ${site.name}\n\n` +
-          `- **City**: ${site.city}\n` +
-          `- **Country**: ${site.country}\n` +
-          `- **Status**: 🟢 **HEALTHY**\n\n` +
-          `This facility is currently fully operational with **0 active incidents**. ✅`
-        );
-      }
-    } else {
-      const cityList = sites.map((s: any) => `**${s.city}** (${s.country})`).join(', ');
-      return (
-        `### 📍 Location Query\n\n` +
-        `I couldn't identify that specific location. We currently track facilities in:\n\n` +
-        `${cityList}\n\n` +
-        `Which site would you like to check?`
-      );
-    }
-  }
-
-  // =====================================================================
-  // Pattern: Specific incident query (status / updates / what has been done)
-  // =====================================================================
+  // Pattern: Specific incident query
   if (matchedIncident) {
     const inc = matchedIncident;
     const narrative = buildProgressNarrative(inc.updates, inc.assignmentGroup, inc.aiDoneSoFar);
@@ -521,8 +550,6 @@ function generateFallbackResponse(
       `- **Priority**: ${priorityEmoji(inc.priority)} **${inc.priority}**\n` +
       `- **Status**: **${inc.status}**\n` +
       `- **Assignment Group**: **${inc.assignmentGroup}**\n` +
-      (inc.cti ? `- **CTI**: ${inc.cti}\n` : '') +
-      (inc.cmdbCi ? `- **CMDB CI**: ${inc.cmdbCi}\n` : '') +
       `- **Opened**: ${fmtDate(inc.openedAt)}\n` +
       (inc.closedAt ? `- **Closed**: ${fmtDate(inc.closedAt)}\n` : '') +
       `- **Affected Sites**:\n  - ${siteNames}\n\n` +
@@ -530,29 +557,27 @@ function generateFallbackResponse(
       `${narrative}\n\n` +
       `### Next Steps Awaited\n\n` +
       `${inc.aiWhatIsAwaited || 'Awaiting next mandatory status update and secondary system validation.'}\n\n` +
-      (inc.teamsBridgeLink
-        ? `🔗 [Join Command Bridge](${inc.teamsBridgeLink})\n`
-        : '')
+      (inc.teamsBridgeLink ? `🔗 [Join Command Bridge](${inc.teamsBridgeLink})\n` : '')
     );
   }
 
-  // =====================================================================
-  // Pattern: General conversational fallback
-  // =====================================================================
-  const activeCount = activeIncidents.length;
-
+  // General conversational fallback
   return (
-    `### 🤖 CIM Command Copilot\n\n` +
-    `Hello! I'm your AI operations assistant for the Critical Incident Management Portal. ` +
-    `We're currently tracking **${activeCount} active incident${activeCount !== 1 ? 's' : ''}** across **${sites.length} sites**.\n\n` +
+    `### 🤖 CIM Command Copilot (ServiceNow MCP Enabled)\n\n` +
+    `Hello! I'm your AI operations assistant for the Critical Incident Management Portal with **real-time ServiceNow MCP tool access**.\n\n` +
     `Here are some things you can ask me:\n\n` +
-    `- 📊 *"Give me an executive summary"*\n` +
-    `- 📋 *"List all active incidents"*\n` +
-    `- 📍 *"What's happening in Chicago?"*\n` +
-    `- 🔍 *"Tell me about INC0010001"*\n` +
-    `- 📞 *"Send me the Teams bridge link for INC0000060"*\n` +
-    `- 📈 *"How many incidents are open?"*\n` +
-    `- ❓ *"What priority is INC0010001?"*\n\n` +
-    `How can I help you coordinate operations today? 😊`
+    `- ⚡ *"Check incident INC0000060 in ServiceNow"*
+` +
+    `- 🔄 *"Show recent change requests in ServiceNow"*
+` +
+    `- 📚 *"Search KB for database high CPU"*
+` +
+    `- 📊 *"Give me an executive summary"*
+` +
+    `- 📋 *"List all active incidents"*
+` +
+    `- 📞 *"Send me the Teams bridge link for active incident"*
+\n` +
+    `How can I assist your operations today? 😊`
   );
 }
