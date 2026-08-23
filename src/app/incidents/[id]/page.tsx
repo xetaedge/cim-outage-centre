@@ -74,6 +74,7 @@ export default function IncidentDetailsPage() {
 
   // AI Powered Analysis state
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [snTelemetry, setSnTelemetry] = useState<any>(null);
   const [loadingAiAnalysis, setLoadingAiAnalysis] = useState(false);
   const [showAiAnalysis, setShowAiAnalysis] = useState(false);
 
@@ -163,15 +164,18 @@ export default function IncidentDetailsPage() {
       const data = await res.json();
       if (data.success && data.analysis) {
         setAiAnalysis(data.analysis);
+        if (data.serviceNowTelemetry) {
+          setSnTelemetry(data.serviceNowTelemetry);
+        }
         addToast({
-          title: '🧠 AI Analysis Complete',
-          message: `Assignment group recommendation and ${data.analysis.relatedIncidents?.length || 0} related incidents found.`,
+          title: '🧠 AI Analysis & ServiceNow MCP Synchronized',
+          message: `Recommended: ${data.analysis.assignmentGroupRecommendation?.recommended || 'Support Team'} (${data.modelUsed || 'Gemini AI'})`,
           type: 'update',
         });
       } else {
         addToast({
-          title: '⚠️ AI Analysis Failed',
-          message: data.error || 'Could not complete analysis. Check Gemini API key.',
+          title: '⚠️ AI Analysis Notice',
+          message: data.error || 'Check Gemini AI Engine credentials in Admin Settings.',
           type: 'update',
         });
       }
@@ -1202,6 +1206,53 @@ export default function IncidentDetailsPage() {
                 </div>
               ) : aiAnalysis ? (
                 <>
+                  {/* ServiceNow Live MCP Telemetry Card */}
+                  {snTelemetry && (
+                    <div className="p-4 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 via-slate-900 to-slate-900 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                            <Radio className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+                          </span>
+                          <span className="text-xs font-bold text-white">ServiceNow Live MCP Telemetry</span>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                          {snTelemetry.connected ? 'Connected' : 'Instance Active'}
+                        </span>
+                      </div>
+
+                      {snTelemetry.liveIncident && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] font-mono">
+                          <div className="p-2 bg-slate-950/60 rounded-lg border border-slate-800">
+                            <span className="text-slate-500 block">SN Priority</span>
+                            <span className="text-white font-bold">{snTelemetry.liveIncident.priority || 'N/A'}</span>
+                          </div>
+                          <div className="p-2 bg-slate-950/60 rounded-lg border border-slate-800">
+                            <span className="text-slate-500 block">SN State</span>
+                            <span className="text-emerald-400 font-bold">{snTelemetry.liveIncident.state || 'N/A'}</span>
+                          </div>
+                          <div className="p-2 bg-slate-950/60 rounded-lg border border-slate-800 col-span-2">
+                            <span className="text-slate-500 block">SN Assignment Group</span>
+                            <span className="text-purple-300 font-bold truncate block">{snTelemetry.liveIncident.assignmentGroup || 'N/A'}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {snTelemetry.changeRequests?.length > 0 && (
+                        <div className="pt-2 border-t border-purple-500/20 text-[11px] space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-purple-300 flex items-center gap-1">
+                            <span>🔄 Correlated ServiceNow Changes ({snTelemetry.changeRequests.length}):</span>
+                          </span>
+                          {snTelemetry.changeRequests.map((c: any, i: number) => (
+                            <div key={i} className="text-slate-300 text-[10px]">
+                              • <strong className="text-white">{c.number}</strong> ({c.risk || 'Risk'}): {c.shortDescription}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* 1. Assignment Group Recommendation */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
