@@ -31,6 +31,9 @@ import {
   Edit2,
   Save,
   Building2,
+  Wrench,
+  Terminal,
+  Code2,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 
@@ -1160,6 +1163,56 @@ export default function AdminSettingsPage() {
               {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
               <span>Save Configuration</span>
             </button>
+          </div>
+
+          {/* Model Context Protocol (MCP) Tool Suite */}
+          <div className="pt-4 border-t border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="p-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                  <Terminal className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-xs font-bold text-white">Model Context Protocol (MCP) Tool Suite</span>
+              </div>
+              <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
+                8 Tools Active (Stdio & HTTP)
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Standard JSON-RPC 2.0 MCP interface connected to ServiceNow. Autonomous agents and AI Copilots can dynamically query, create, and update incidents, search KBs, and correlate change requests.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[10px]">
+              {[
+                { name: 'servicenow_get_incident', desc: 'Fetch full incident by number or sys_id', tag: 'Read' },
+                { name: 'servicenow_list_incidents', desc: 'Filter active/P1 incidents by group/state', tag: 'Query' },
+                { name: 'servicenow_create_incident', desc: 'Create new ticket with urgency & CTI', tag: 'Write' },
+                { name: 'servicenow_update_incident', desc: 'Append work notes & transition states', tag: 'Write' },
+                { name: 'servicenow_search_kb', desc: 'Search knowledge articles & playbooks', tag: 'Search' },
+                { name: 'servicenow_get_change_requests', desc: 'Correlate recent deployments (CHG)', tag: 'Query' },
+                { name: 'servicenow_fetch_table_records', desc: 'Generic query for CMDB, users & groups', tag: 'Read' },
+                { name: 'servicenow_test_connection', desc: 'Real-time credentials & latency check', tag: 'Health' },
+              ].map((tool) => (
+                <div key={tool.name} className="p-2 bg-slate-950/70 border border-slate-800 rounded-xl space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-accent font-bold">{tool.name}</span>
+                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase font-sans font-bold">{tool.tag}</span>
+                  </div>
+                  <p className="text-slate-400 text-[10px] font-sans">{tool.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-[11px] font-mono text-slate-400 space-y-1">
+              <div className="text-slate-300 font-bold flex items-center gap-1.5">
+                <Code2 className="w-3.5 h-3.5 text-accent" />
+                <span>MCP Endpoints & Config:</span>
+              </div>
+              <p>• Local Stdio Server: <code className="text-amber-300">node scripts/servicenow-mcp-server.js</code></p>
+              <p>• Web JSON-RPC Endpoint: <code className="text-emerald-300">POST /api/mcp/servicenow</code></p>
+              <p>• Config Manifest: <code className="text-purple-300">mcp_config.json</code></p>
+            </div>
           </div>
         </div>
       )}

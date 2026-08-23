@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "servicenow": {
+      "command": "node",
+      "args": [
+        "scripts/servicenow-mcp-server.js"
+      ],
+      "env": {
+        "SERVICENOW_INSTANCE_URL": "https://dev403781.service-now.com",
+        "SERVICENOW_USERNAME": "admin"
+      }
+    }
+  }
+}

@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       prisma.site.findMany({
         include: { incidents: { include: { incident: true } } },
       }),
-      getAIConfig(),
+      getGeminiConfig(),
     ]);
 
     const activeIncidents = allIncidents.filter((i) => i.status !== 'CLOSED');
