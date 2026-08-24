@@ -42,6 +42,11 @@ import {
   ChevronRight,
   TrendingUp,
   AlertCircle,
+  MapPin,
+  Plus,
+  Trash2,
+  Building2,
+  Search,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 import { IncidentData } from '@/components/IncidentCard';
@@ -78,9 +83,20 @@ export default function IncidentDetailsPage() {
   const [loadingAiAnalysis, setLoadingAiAnalysis] = useState(false);
   const [showAiAnalysis, setShowAiAnalysis] = useState(false);
 
+  // Location Management & ServiceNow Refresh state
+  const [refreshingServiceNow, setRefreshingServiceNow] = useState(false);
+  const [showAddLocationModal, setShowAddLocationModal] = useState(false);
+  const [availableSites, setAvailableSites] = useState<any[]>([]);
+  const [loadingSites, setLoadingSites] = useState(false);
+  const [siteSearch, setSiteSearch] = useState('');
+  const [addingSiteId, setAddingSiteId] = useState<string | null>(null);
+  const [removingSiteId, setRemovingSiteId] = useState<string | null>(null);
+
   // Edit Attributes State
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
+    shortDescription: '',
+    description: '',
     priority: '',
     assignmentGroup: '',
     assignedTo: '',
@@ -104,6 +120,8 @@ export default function IncidentDetailsPage() {
         setIncident(data.incident);
         setNextCadenceHours(data.incident.priority === 'P2' ? 2 : 1);
         setEditForm({
+          shortDescription: data.incident.shortDescription || '',
+          description: data.incident.description || '',
           priority: data.incident.priority || '',
           assignmentGroup: data.incident.assignmentGroup || '',
           assignedTo: data.incident.assignedTo || '',
@@ -152,6 +170,126 @@ export default function IncidentDetailsPage() {
       console.error('Failed to fetch RCA:', e);
     } finally {
       setLoadingRca(false);
+    }
+  };
+
+
+  const handleRefreshFromServiceNow = async () => {
+    if (!incident) return;
+    setRefreshingServiceNow(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/refresh-servicenow`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success && data.incident) {
+        setIncident(data.incident);
+        addToast({
+          title: '🔄 ServiceNow Synchronized',
+          message: data.message || 'Incident attributes updated from ServiceNow.',
+          type: 'update',
+        });
+      } else {
+        addToast({
+          title: '⚠️ Refresh Failed',
+          message: data.error || 'Could not fetch record from ServiceNow.',
+          type: 'update',
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        title: '❌ Network Error',
+        message: 'Failed to contact ServiceNow refresh endpoint.',
+        type: 'update',
+      });
+    } finally {
+      setRefreshingServiceNow(false);
+    }
+  };
+
+  const fetchAvailableSites = async () => {
+    setLoadingSites(true);
+    try {
+      const res = await fetch('/api/sites');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.sites)) {
+        setAvailableSites(data.sites);
+      }
+    } catch (err) {
+      console.warn('Failed to load sites:', err);
+    } finally {
+      setLoadingSites(false);
+    }
+  };
+
+  const handleAddLocation = async (siteId: string, siteName: string) => {
+    if (!incident) return;
+    setAddingSiteId(siteId);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/sites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteId }),
+      });
+      const data = await res.json();
+      if (data.success && data.incident) {
+        setIncident(data.incident);
+        setShowAddLocationModal(false);
+        setSiteSearch('');
+        addToast({
+          title: '📍 Location Added',
+          message: `Added ${siteName} to incident ${incident.number}.`,
+          type: 'update',
+        });
+      } else {
+        addToast({
+          title: '⚠️ Error Adding Location',
+          message: data.error || 'Could not add location.',
+          type: 'update',
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        title: '❌ Network Error',
+        message: 'Failed to add location.',
+        type: 'update',
+      });
+    } finally {
+      setAddingSiteId(null);
+    }
+  };
+
+  const handleRemoveLocation = async (siteId: string, siteName: string) => {
+    if (!incident) return;
+    if (!confirm(`Are you sure you want to remove "${siteName}" from this incident?`)) return;
+    setRemovingSiteId(siteId);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/sites?siteId=${siteId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success && data.incident) {
+        setIncident(data.incident);
+        addToast({
+          title: '🗑️ Location Removed',
+          message: `Removed ${siteName} from incident ${incident.number}.`,
+          type: 'update',
+        });
+      } else {
+        addToast({
+          title: '⚠️ Error Removing Location',
+          message: data.error || 'Could not remove location.',
+          type: 'update',
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        title: '❌ Network Error',
+        message: 'Failed to remove location.',
+        type: 'update',
+      });
+    } finally {
+      setRemovingSiteId(null);
     }
   };
 
@@ -356,6 +494,17 @@ export default function IncidentDetailsPage() {
             </div>
           )}
 
+          {/* Refresh from ServiceNow Button */}
+          <button
+            onClick={handleRefreshFromServiceNow}
+            disabled={refreshingServiceNow}
+            className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh latest Assignment Group, Assigned To, CI, Short Description & Description from ServiceNow"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshingServiceNow ? 'animate-spin' : ''}`} />
+            <span>{refreshingServiceNow ? 'Refreshing...' : 'Refresh from ServiceNow'}</span>
+          </button>
+
           {/* AI Powered Analysis Button */}
           <button
             onClick={handleRunAiAnalysis}
@@ -391,6 +540,17 @@ export default function IncidentDetailsPage() {
             </div>
           </div>
           
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] text-slate-400 font-semibold mb-1 uppercase">Short Description</label>
+              <input type="text" value={editForm.shortDescription} onChange={(e) => setEditForm({...editForm, shortDescription: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-400 font-semibold mb-1 uppercase">Description</label>
+              <input type="text" value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:border-blue-500 outline-none" />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-[10px] text-slate-400 font-semibold mb-1 uppercase">Priority</label>
@@ -749,6 +909,85 @@ export default function IncidentDetailsPage() {
 
         {/* Right Sidebar: KB Articles & ServiceNow Related Change Requests */}
         <div className="space-y-6">
+          {/* Sidebar Section 0: Impacted Locations & Facilities (Add / Remove) */}
+          <div className="glass-card p-5 border border-slate-800 rounded-2xl space-y-3 bg-slate-900/90">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-amber-400" />
+                Impacted Locations ({incident.sites?.length || 0})
+              </h3>
+              {currentRole !== 'GUEST' && !isClosed && (
+                <button
+                  onClick={() => {
+                    fetchAvailableSites();
+                    setShowAddLocationModal(true);
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg flex items-center gap-1 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Location
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-2 text-xs">
+              {incident.sites && incident.sites.length > 0 ? (
+                incident.sites.map((rel: any) => {
+                  const s = rel.site;
+                  if (!s) return null;
+                  return (
+                    <div
+                      key={s.id}
+                      className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-1.5 hover:border-amber-500/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-white flex items-center gap-1.5">
+                            <span>{s.name}</span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                              {s.code}
+                            </span>
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {s.city}{s.state ? `, ${s.state}` : ''}, {s.country} • {s.businessUnit || 'General'}
+                          </p>
+                        </div>
+                        {currentRole !== 'GUEST' && !isClosed && (
+                          <button
+                            onClick={() => handleRemoveLocation(s.id, s.name)}
+                            disabled={removingSiteId === s.id}
+                            className="p-1 rounded bg-slate-800/80 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/50 hover:border-red-500/30 transition-colors"
+                            title="Remove location from incident"
+                          >
+                            {removingSiteId === s.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      {s.supportPersons && s.supportPersons.length > 0 && (
+                        <div className="pt-1 border-t border-slate-800/60 text-[10px] text-slate-400 space-y-0.5">
+                          <p className="text-slate-500 font-semibold">Support Contact:</p>
+                          {s.supportPersons.slice(0, 1).map((sp: any) => (
+                            <p key={sp.id} className="text-slate-300">
+                              👤 {sp.name} {sp.mobile1 ? `(${sp.mobile1})` : ''} • {sp.email}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                  No specific location assigned yet. Click "+ Add Location" to link a facility.
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Sidebar Section 1: ServiceNow KB SOP Articles (Relevant to issue) */}
           <div className="glass-card p-5 border border-blue-900/60 rounded-2xl space-y-3 bg-slate-900/90">
             <h3 className="font-bold text-sm text-white flex items-center gap-2 border-b border-slate-800 pb-2.5">
@@ -1549,6 +1788,127 @@ export default function IncidentDetailsPage() {
           </div>
         </div>
       )}
+          {/* Add Location Modal Dialog */}
+      {showAddLocationModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Add Impacted Location</h3>
+                  <p className="text-[10px] text-slate-400">Link facility site to incident {incident.number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddLocationModal(false);
+                  setSiteSearch('');
+                }}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative shrink-0">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by city, country, name, or code..."
+                value={siteSearch}
+                onChange={(e) => setSiteSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/60"
+              />
+            </div>
+
+            {/* Sites List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {loadingSites ? (
+                <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                  <span>Loading available locations...</span>
+                </div>
+              ) : (
+                (() => {
+                  const currentSiteIds = new Set((incident.sites || []).map((s: any) => s.site?.id || s.siteId));
+                  const filtered = availableSites
+                    .filter((s: any) => !currentSiteIds.has(s.id))
+                    .filter((s: any) => {
+                      if (!siteSearch.trim()) return true;
+                      const q = siteSearch.toLowerCase();
+                      return (
+                        s.name?.toLowerCase().includes(q) ||
+                        s.city?.toLowerCase().includes(q) ||
+                        s.country?.toLowerCase().includes(q) ||
+                        s.code?.toLowerCase().includes(q) ||
+                        s.businessUnit?.toLowerCase().includes(q)
+                      );
+                    });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                        {availableSites.length === 0
+                          ? 'No locations found in the system.'
+                          : 'No matching unlinked locations found.'}
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((s: any) => (
+                    <div
+                      key={s.id}
+                      className="p-3 bg-slate-950/60 border border-slate-800 hover:border-amber-500/40 rounded-xl flex items-center justify-between gap-3 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <span>{s.name}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">
+                            {s.code}
+                          </span>
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          📍 {s.city}, {s.country} • {s.businessUnit || s.siteType || 'Corporate'}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => handleAddLocation(s.id, s.name)}
+                        disabled={addingSiteId === s.id}
+                        className="px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg flex items-center gap-1 shadow-md shadow-amber-500/20 disabled:opacity-50 shrink-0"
+                      >
+                        {addingSiteId === s.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                        <span>Add</span>
+                      </button>
+                    </div>
+                  ));
+                })()
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-end shrink-0">
+              <button
+                onClick={() => {
+                  setShowAddLocationModal(false);
+                  setSiteSearch('');
+                }}
+                className="px-4 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

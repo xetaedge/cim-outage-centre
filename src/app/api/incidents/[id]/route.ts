@@ -56,6 +56,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     const {
       status,
+      shortDescription,
+      description,
+      cti,
       issueSummary,
       teamsBridgeLink,
       priority,
@@ -79,6 +82,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         if (status === 'CLOSED') updateData.closedAt = new Date();
       }
     }
+    if (shortDescription !== undefined) updateData.shortDescription = shortDescription;
+    if (description !== undefined) updateData.description = description;
+    if (cti !== undefined) updateData.cti = cti;
     if (issueSummary !== undefined) updateData.issueSummary = issueSummary;
     if (teamsBridgeLink !== undefined) updateData.teamsBridgeLink = teamsBridgeLink;
     if (priority !== undefined) updateData.priority = priority;
