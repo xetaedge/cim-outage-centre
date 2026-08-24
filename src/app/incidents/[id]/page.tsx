@@ -1257,7 +1257,7 @@ export default function IncidentDetailsPage() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-violet-400" />
-                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">Assignment Group Recommendation</h3>
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">1. Assignment Group Recommendation</h3>
                     </div>
 
                     <div className={`p-4 rounded-xl border ${
@@ -1272,7 +1272,7 @@ export default function IncidentDetailsPage() {
                           <p className="text-sm font-extrabold text-white">{aiAnalysis.assignmentGroupRecommendation?.recommended || 'N/A'}</p>
                           <p className="text-xs text-slate-300 leading-relaxed">{aiAnalysis.assignmentGroupRecommendation?.reasoning}</p>
                         </div>
-                        <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                        <span className={`shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-full border ${
                           aiAnalysis.assignmentGroupRecommendation?.confidence === 'HIGH'
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                             : aiAnalysis.assignmentGroupRecommendation?.confidence === 'MEDIUM'
@@ -1312,65 +1312,12 @@ export default function IncidentDetailsPage() {
                   {/* Divider */}
                   <div className="border-t border-slate-800" />
 
-                  {/* 2. Related Incidents */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <History className="w-4 h-4 text-blue-400" />
-                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">Previous Related Incidents</h3>
-                      <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full">
-                        {aiAnalysis.relatedIncidents?.length || 0} Found
-                      </span>
-                    </div>
-
-                    {aiAnalysis.relatedIncidents?.length > 0 ? (
-                      <div className="space-y-2">
-                        {aiAnalysis.relatedIncidents.map((inc: any, idx: number) => (
-                          <div key={idx} className="p-4 bg-slate-900 border border-slate-800 rounded-xl hover:border-blue-500/40 transition-colors space-y-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded border ${
-                                  inc.priority === 'P1' ? 'bg-red-500/20 text-red-400 border-red-500/40' :
-                                  inc.priority === 'P2' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
-                                  'bg-slate-700 text-slate-400 border-slate-600'
-                                }`}>{inc.priority}</span>
-                                <span className="text-xs font-bold text-blue-300 font-mono">{inc.incidentNumber}</span>
-                              </div>
-                              <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full border ${
-                                inc.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                                inc.status === 'RESOLVED' ? 'bg-teal-500/20 text-teal-400 border-teal-500/30' :
-                                'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                              }`}>{inc.status}</span>
-                            </div>
-                            <p className="text-xs text-white font-semibold leading-tight">{inc.shortDescription}</p>
-                            <p className="text-[10px] text-slate-400">Group: <span className="text-slate-300">{inc.assignmentGroup}</span></p>
-                            <div className="pt-1.5 border-t border-slate-800">
-                              <p className="text-[10px] text-violet-300 font-semibold mb-0.5">Why Related</p>
-                              <p className="text-[10px] text-slate-400 leading-relaxed">{inc.similarityReason}</p>
-                            </div>
-                            {inc.resolution && (
-                              <div className="pt-1.5 border-t border-slate-800">
-                                <p className="text-[10px] text-emerald-300 font-semibold mb-0.5">How It Was Resolved</p>
-                                <p className="text-[10px] text-slate-400 leading-relaxed">{inc.resolution}</p>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-xs text-slate-500 border border-slate-800 rounded-xl bg-slate-900/50">
-                        No directly related incidents found in the portal knowledge base.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-slate-800" />
-
-                  {/* 3. Resolution Steps */}
+                  {/* 2. Suggested Resolution Steps */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Lightbulb className="w-4 h-4 text-amber-400" />
-                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">Suggested Resolution Steps</h3>
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">2. Suggested Resolution Steps</h3>
+                      <span className="ml-auto text-[10px] text-amber-400/80 font-mono">ServiceNow & Portal Derived</span>
                     </div>
 
                     <div className="space-y-2">
@@ -1391,26 +1338,186 @@ export default function IncidentDetailsPage() {
                                 step.priority === 'SHORT_TERM' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
                                 'bg-slate-700 text-slate-400 border-slate-600'
                               }`}>{step.priority}</span>
+                              {step.source && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                                  {step.source}
+                                </span>
+                              )}
                             </div>
                             <p className="text-[10px] text-slate-400">
-                              <span className="text-slate-500">Responsible: </span>{step.responsible}
+                              <span className="text-slate-500">Responsible: </span>
+                              <strong className="text-slate-300">{step.responsible}</strong>
                             </p>
                             {step.rationale && (
-                              <p className="text-[10px] text-slate-500 italic leading-relaxed">{step.rationale}</p>
+                              <p className="text-[10px] text-slate-400 italic leading-relaxed">{step.rationale}</p>
                             )}
                           </div>
                         </div>
                       ))}
                     </div>
+                  </div>
 
-                    {/* Urgency Note */}
-                    {aiAnalysis.urgencyNote && (
-                      <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl flex items-start gap-2">
-                        <TrendingUp className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
-                        <p className="text-xs text-slate-300 leading-relaxed">{aiAnalysis.urgencyNote}</p>
+                  {/* Divider */}
+                  <div className="border-t border-slate-800" />
+
+                  {/* 3. Recent ServiceNow Changes (Last 10 Days) */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <GitPullRequest className="w-4 h-4 text-cyan-400" />
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">3. Correlated Changes (Last 10 Days)</h3>
+                      <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+                        {aiAnalysis.recentChanges?.length || 0} Found
+                      </span>
+                    </div>
+
+                    {aiAnalysis.recentChanges?.length > 0 ? (
+                      <div className="space-y-2">
+                        {aiAnalysis.recentChanges.map((chg: any, idx: number) => (
+                          <div key={idx} className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl hover:border-cyan-500/40 transition-colors space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-cyan-300 font-mono">{chg.changeNumber}</span>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${
+                                  chg.risk === 'High' ? 'bg-red-500/20 text-red-400 border-red-500/40' :
+                                  chg.risk === 'Moderate' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' :
+                                  'bg-slate-700 text-slate-400 border-slate-600'
+                                }`}>{chg.risk || 'Normal'}</span>
+                              </div>
+                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                                {chg.state || 'Implemented'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-white font-semibold leading-tight">{chg.shortDescription}</p>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                              <span>CI: <strong className="text-slate-300">{chg.ci || 'General'}</strong></span>
+                              {chg.createdDate && <span>Date: <strong className="text-slate-300">{chg.createdDate}</strong></span>}
+                            </div>
+                            {chg.correlationReason && (
+                              <div className="p-2 bg-slate-950/60 rounded-lg border border-slate-800 text-[10px] text-cyan-300/90 leading-relaxed">
+                                <span className="font-bold text-cyan-400">Correlation: </span>{chg.correlationReason}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-500 border border-slate-800 rounded-xl bg-slate-900/50">
+                        No recent change requests correlated with this incident CI or description.
                       </div>
                     )}
                   </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-slate-800" />
+
+                  {/* 4. Suggested ServiceNow KB Articles */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-emerald-400" />
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">4. Suggested KB Articles & Runbooks</h3>
+                      <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
+                        {aiAnalysis.suggestedKbArticles?.length || 0} Articles
+                      </span>
+                    </div>
+
+                    {aiAnalysis.suggestedKbArticles?.length > 0 ? (
+                      <div className="space-y-2">
+                        {aiAnalysis.suggestedKbArticles.map((kb: any, idx: number) => (
+                          <div key={idx} className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl hover:border-emerald-500/40 transition-colors space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-xs font-bold text-emerald-300 font-mono">{kb.kbNumber}</span>
+                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                                {kb.topic || 'General'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-white font-semibold leading-tight">{kb.title}</p>
+                            {kb.relevanceReason && (
+                              <p className="text-[10px] text-slate-400 leading-relaxed">
+                                <span className="text-slate-500">Relevance: </span>{kb.relevanceReason}
+                              </p>
+                            )}
+                            {kb.recommendedAction && (
+                              <div className="p-2 bg-emerald-950/30 rounded-lg border border-emerald-500/20 text-[10px] text-emerald-300 leading-relaxed">
+                                <span className="font-bold">Playbook Action: </span>{kb.recommendedAction}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-500 border border-slate-800 rounded-xl bg-slate-900/50">
+                        No specific KB articles found in ServiceNow for these symptoms.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-slate-800" />
+
+                  {/* 5. Previous Related Incidents (ServiceNow & Portal) */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-blue-400" />
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">5. Previous Related Incidents</h3>
+                      <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full">
+                        {aiAnalysis.relatedIncidents?.length || 0} Verified
+                      </span>
+                    </div>
+
+                    {aiAnalysis.relatedIncidents?.length > 0 ? (
+                      <div className="space-y-2">
+                        {aiAnalysis.relatedIncidents.map((inc: any, idx: number) => (
+                          <div key={idx} className="p-4 bg-slate-900 border border-slate-800 rounded-xl hover:border-blue-500/40 transition-colors space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-blue-300 font-mono">{inc.incidentNumber}</span>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${
+                                  inc.source === 'ServiceNow' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' :
+                                  'bg-slate-700 text-slate-300 border-slate-600'
+                                }`}>{inc.source || 'ServiceNow'}</span>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded border ${
+                                  inc.priority === 'P1' || inc.priority === '1' ? 'bg-red-500/20 text-red-400 border-red-500/40' :
+                                  inc.priority === 'P2' || inc.priority === '2' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
+                                  'bg-slate-700 text-slate-400 border-slate-600'
+                                }`}>{inc.priority}</span>
+                              </div>
+                              <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full border ${
+                                inc.status === 'Closed' || inc.status === 'CLOSED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                inc.status === 'Resolved' || inc.status === 'RESOLVED' ? 'bg-teal-500/20 text-teal-400 border-teal-500/30' :
+                                'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                              }`}>{inc.status}</span>
+                            </div>
+                            <p className="text-xs text-white font-semibold leading-tight">{inc.shortDescription}</p>
+                            <p className="text-[10px] text-slate-400">Group: <span className="text-slate-300 font-semibold">{inc.assignmentGroup}</span></p>
+                            {inc.similarityReason && (
+                              <div className="pt-1.5 border-t border-slate-800">
+                                <p className="text-[10px] text-violet-300 font-semibold mb-0.5">Why Related</p>
+                                <p className="text-[10px] text-slate-400 leading-relaxed">{inc.similarityReason}</p>
+                              </div>
+                            )}
+                            {inc.resolutionNotes && (
+                              <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-[10px] leading-relaxed space-y-0.5">
+                                <p className="text-emerald-400 font-bold">ServiceNow Close / Resolution Notes:</p>
+                                <p className="text-slate-300">{inc.resolutionNotes}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-500 border border-slate-800 rounded-xl bg-slate-900/50">
+                        No previous related incidents found in ServiceNow.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Urgency Note */}
+                  {aiAnalysis.urgencyNote && (
+                    <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl flex items-start gap-2">
+                      <TrendingUp className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-slate-300 leading-relaxed">{aiAnalysis.urgencyNote}</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
