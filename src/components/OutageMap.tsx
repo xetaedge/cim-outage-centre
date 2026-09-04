@@ -278,7 +278,7 @@ export const OutageMap: React.FC = () => {
           </div>
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              Global Active Outages Map ({activeOutageSites.length} Affected Locations | {totalIncidentsTagged} Active Incidents Tagged)
+              Global Active Outages Map
               <span className="px-2 py-0.5 text-[10px] bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 rounded-full flex items-center gap-1 font-semibold">
                 <Sparkles className="w-3 h-3 text-yellow-400" />
                 Cumulative AI Briefings
