@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Globe, MapPin, Sparkles } from 'lucide-react';
+import { Globe, MapPin, Sparkles, Layers } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 
 interface IncidentInfo {
@@ -102,7 +102,7 @@ const MapComponent = dynamic(
         );
       };
 
-      const Component = ({ sites }: { sites: SiteMapData[] }) => {
+      const Component = ({ sites, mapTheme = 'dark' }: { sites: SiteMapData[]; mapTheme?: string }) => {
         return (
           <MapContainer
             center={[25, 10]}
@@ -110,10 +110,33 @@ const MapComponent = dynamic(
             scrollWheelZoom={false}
             className="w-full h-full min-h-[360px] rounded-xl z-0"
           >
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            />
+            {mapTheme === 'satellite' ? (
+              <TileLayer
+                attribution='&copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics'
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                maxZoom={18}
+              />
+            ) : mapTheme === 'osm' ? (
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                maxZoom={19}
+              />
+            ) : (
+              <>
+                {/* Esri World Dark Gray Base Map — 100% Free & No API Key Required */}
+                <TileLayer
+                  attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, DeLorme, NAVTEQ'
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                  maxZoom={16}
+                />
+                {/* Boundaries & Labels Reference Layer */}
+                <TileLayer
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+                  maxZoom={16}
+                />
+              </>
+            )}
 
             {sites.map((site) => (
               <Marker
@@ -163,6 +186,7 @@ const MapComponent = dynamic(
 export const OutageMap: React.FC = () => {
   const { refreshTrigger } = useCimStore();
   const [activeOutageSites, setActiveOutageSites] = useState<SiteMapData[]>([]);
+  const [mapTheme, setMapTheme] = useState<'dark' | 'satellite' | 'osm'>('dark');
 
   const fetchActiveOutageLocations = async () => {
     try {
@@ -247,7 +271,7 @@ export const OutageMap: React.FC = () => {
   return (
     <div className="glass-card p-5 border border-slate-800 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center space-x-3">
           <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/30">
             <Globe className="w-5 h-5" />
@@ -266,16 +290,49 @@ export const OutageMap: React.FC = () => {
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="hidden sm:flex items-center space-x-4 text-xs font-semibold">
-          <div className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-400" />
-            <span className="text-slate-300">P2 Warning Location</span>
+        {/* Layer Switcher & Legend */}
+        <div className="flex items-center space-x-3 text-xs font-semibold flex-wrap gap-y-2">
+          {/* Layer Selector */}
+          <div className="flex items-center bg-slate-900 border border-slate-700/60 rounded-lg p-0.5 space-x-0.5">
+            <button
+              onClick={() => setMapTheme('dark')}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                mapTheme === 'dark' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Dark Ops
+            </button>
+            <button
+              onClick={() => setMapTheme('satellite')}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                mapTheme === 'satellite' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Satellite
+            </button>
+            <button
+              onClick={() => setMapTheme('osm')}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                mapTheme === 'osm' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Street
+            </button>
           </div>
 
-          <div className="flex items-center space-x-1.5">
-            <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-red-400">P1 Critical Outage (Blinking)</span>
+          <div className="hidden md:block h-4 w-px bg-slate-700/60" />
+
+          {/* Legend */}
+          <div className="hidden sm:flex items-center space-x-3">
+            <div className="flex items-center space-x-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-400" />
+              <span className="text-slate-300">P2 Warning</span>
+            </div>
+
+            <div className="flex items-center space-x-1.5">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-red-400">P1 Critical</span>
+            </div>
           </div>
         </div>
       </div>
@@ -291,7 +348,7 @@ export const OutageMap: React.FC = () => {
             </p>
           </div>
         ) : (
-          <MapComponent sites={activeOutageSites} />
+          <MapComponent sites={activeOutageSites} mapTheme={mapTheme} />
         )}
       </div>
     </div>
