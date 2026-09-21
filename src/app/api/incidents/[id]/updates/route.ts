@@ -2,15 +2,22 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { generateAIIncidentInsights } from '@/lib/openai';
-import { sendEmail, getAssignmentGroupEmail, getSiteEmails } from '@/lib/email';
-import { buildCimUpdateEmail } from '@/templates/cimUpdateEmailTemplate';
+import { getAssignmentGroupEmail, getSiteEmails } from '@/lib/email';
 import { fetchServiceNowAPI } from '@/lib/servicenow';
 import { verifyToken } from '@/lib/auth';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
-    const { comment, authorName, nextCadenceHours = 1, isFinalUpdate = false, totalOutageDuration = '' } = await request.json();
+    const {
+      comment,
+      authorName,
+      nextCadenceHours = 1,
+      isFinalUpdate = false,
+      totalOutageDuration = '',
+      publishToWorknotes = true,
+      additionalInfo = '',
+    } = await request.json();
 
     const cookieStore = cookies();
     const token = cookieStore.get('cim_token')?.value;
@@ -57,8 +64,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const cadenceHours = typeof nextCadenceHours === 'number' ? nextCadenceHours : (incident.priority === 'P2' ? 2 : 1);
     const nextDueTimestamp = new Date(Date.now() + cadenceHours * 60 * 60 * 1000);
 
-    // Collaborate ALL chronological updates
+    // Collaborate ALL chronological updates — include additionalInfo for richer AI synthesis
     const allUpdates = [...incident.updates.map((u) => u.comment), comment];
+    if (additionalInfo && additionalInfo.trim()) {
+      allUpdates.push(`[Additional Context for RCA] ${additionalInfo.trim()}`);
+    }
     const siteNames = incident.sites.map((s) => s.site.name);
 
     // Auto-generate Descriptive Summary under "WHAT HAS BEEN DONE SO FAR"
@@ -72,35 +82,74 @@ export async function POST(request: Request, { params }: { params: { id: string 
       siteNames
     );
 
-    const updatedIncident = await prisma.incident.update({
-      where: { id: incident.id },
-      data: {
-        nextUpdateDueAt: nextDueTimestamp,
-        aiCurrentStatusSummary: aiResult.currentStatusSummary,
-        aiDoneSoFar: aiResult.doneSoFar,
-        aiWhatIsAwaited: aiResult.whatIsAwaited,
-        aiTechnicalSummary: aiResult.technicalSummary,
-        issueSummary: aiResult.issueSummaryRephrased,
-        ...(isFinalUpdate && totalOutageDuration ? { totalOutageDuration } : {})
-      },
-      include: {
-        updates: { orderBy: { updateNumber: 'asc' } },
-        sites: { include: { site: true } },
-      },
-    });
+    // Store additionalInfo in the incident if provided (helps RCA later)
+    const additionalInfoUpdate = additionalInfo && additionalInfo.trim()
+      ? { additionalInfo: additionalInfo.trim() }
+      : {};
+
+    if (additionalInfo && additionalInfo.trim()) {
+      await prisma.$executeRawUnsafe('ALTER TABLE "Incident" ADD COLUMN IF NOT EXISTS "additionalInfo" TEXT;').catch(() => {});
+    }
+
+    let updatedIncident: any;
+    try {
+      updatedIncident = await prisma.incident.update({
+        where: { id: incident.id },
+        data: {
+          nextUpdateDueAt: nextDueTimestamp,
+          aiCurrentStatusSummary: aiResult.currentStatusSummary,
+          aiDoneSoFar: aiResult.doneSoFar,
+          aiWhatIsAwaited: aiResult.whatIsAwaited,
+          aiTechnicalSummary: aiResult.technicalSummary,
+          issueSummary: aiResult.issueSummaryRephrased,
+          ...(isFinalUpdate && totalOutageDuration ? { totalOutageDuration } : {}),
+          ...additionalInfoUpdate,
+        },
+        include: {
+          updates: { orderBy: { updateNumber: 'asc' } },
+          sites: { include: { site: true } },
+        },
+      });
+    } catch (updateErr) {
+      // Graceful fallback if additionalInfo is not in current DB schema
+      updatedIncident = await prisma.incident.update({
+        where: { id: incident.id },
+        data: {
+          nextUpdateDueAt: nextDueTimestamp,
+          aiCurrentStatusSummary: aiResult.currentStatusSummary,
+          aiDoneSoFar: aiResult.doneSoFar,
+          aiWhatIsAwaited: aiResult.whatIsAwaited,
+          aiTechnicalSummary: aiResult.technicalSummary,
+          issueSummary: aiResult.issueSummaryRephrased,
+          ...(isFinalUpdate && totalOutageDuration ? { totalOutageDuration } : {}),
+        },
+        include: {
+          updates: { orderBy: { updateNumber: 'asc' } },
+          sites: { include: { site: true } },
+        },
+      });
+    }
 
     // Audit Log
+    const auditDetails = [
+      `Posted Update #${nextUpdateNumber} on ${incident.number}.`,
+      `Next update due at ${nextDueTimestamp.toLocaleTimeString()}.`,
+      publishToWorknotes ? 'Worknotes synced to ServiceNow.' : 'Worknotes sync SKIPPED (user opted out).',
+      additionalInfo ? 'Additional RCA context provided.' : '',
+    ].filter(Boolean).join(' ');
+
     await prisma.auditLog.create({
       data: {
         userId: session?.id || null,
         userName: effectiveAuthorName,
         userRole: session?.role || 'INCIDENT_MANAGER',
         action: 'UPDATE_POSTED',
-        details: `Posted Update #${nextUpdateNumber} on ${incident.number}. Next update due at ${nextDueTimestamp.toLocaleTimeString()}.`,
+        details: auditDetails,
       },
     });
 
-    // Send CIM Update Email
+    // Build CIM Email Preview payload (email is NOT sent yet — returned to client for review)
+    let emailPreview: Record<string, any> | null = null;
     try {
       const startDt = new Date(incident.openedAt);
       const diffMs = Date.now() - startDt.getTime();
@@ -109,12 +158,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       const outageDuration = `${diffHrs}h ${diffMins}m`;
 
       const updateSeqStr = isFinalUpdate ? 'FINAL' : nextUpdateNumber.toString();
-      
-      const resolutionBullets = updatedIncident.aiDoneSoFar
-        ? `<ul>${updatedIncident.aiDoneSoFar.split('\n').filter((l: string)=>l.trim()).map((l: string) => `<li>${l.replace(/^[-*]\s*/, '')}</li>`).join('')}</ul>`
-        : '<ul><li>Investigating</li></ul>';
 
-      const cimHtml = buildCimUpdateEmail({
+      const resolutionBullets = updatedIncident.aiDoneSoFar
+        ? updatedIncident.aiDoneSoFar.split('\n').filter((l: string) => l.trim()).map((l: string) => l.replace(/^[-*]\s*/, ''))
+        : ['Investigating'];
+
+      // Fetch Assignment Group email and site emails for recipient preview
+      const agEmail = await getAssignmentGroupEmail(incident.assignmentGroup);
+      const siteEmails = getSiteEmails(incident.sites);
+      const extraEmails = [agEmail, siteEmails].filter(Boolean).join(',');
+
+      emailPreview = {
+        subject: `Priority Incident Update - ${incident.number}`,
         updateSequence: updateSeqStr,
         incidentNumber: incident.number,
         startDate: startDt.toLocaleDateString(),
@@ -127,58 +182,52 @@ export async function POST(request: Request, { params }: { params: { id: string 
         outageDuration: isFinalUpdate && totalOutageDuration ? totalOutageDuration : outageDuration,
         assignmentGroup: incident.assignmentGroup || 'General',
         relatedIncidents: updatedIncident.relatedIncidents || 'None',
+        // AI-rephrased fields — shown prominently in the review modal
         issueSummary: updatedIncident.issueSummary || comment,
-        resolutionStatus: resolutionBullets,
+        resolutionBullets,
         overallStatus: updatedIncident.aiCurrentStatusSummary || updatedIncident.status,
         teamsInvolved: updatedIncident.teamsInvolved || 'N/A',
         partnerLead: updatedIncident.partnerLead || 'N/A',
         itCoordinator: updatedIncident.cdItCoordinator || 'N/A',
         stakeholders: updatedIncident.stakeholdersInformed || 'N/A',
         teamsLink: incident.teamsBridgeLink || '#',
-      });
-
-      // Fetch Assignment Group email and site emails
-      const agEmail = await getAssignmentGroupEmail(incident.assignmentGroup);
-      const siteEmails = getSiteEmails(incident.sites);
-      const extraEmails = [agEmail, siteEmails].filter(Boolean).join(',');
-
-      sendEmail(
-        'CIM_UPDATE_RECIPIENTS',
-        `Priority Incident Update - ${incident.number}`,
-        cimHtml,
-        extraEmails
-      );
+        extraEmails,
+      };
     } catch (emailErr) {
-      console.error('Failed to send CIM update email:', emailErr);
+      console.error('Failed to build CIM email preview:', emailErr);
     }
 
-    // Sync worknotes to ServiceNow (fire-and-forget)
-    try {
-      const workNote = `[CIM Outage Centre - Update #${nextUpdateNumber}] by ${effectiveAuthorName}:\n${comment}`;
-      // First, look up the incident sys_id by number
-      const lookupRes = await fetchServiceNowAPI(
-        `/api/now/table/incident?sysparm_query=number=${encodeURIComponent(incident.number)}&sysparm_fields=sys_id&sysparm_limit=1`,
-        { method: 'GET' }
-      );
-      if (lookupRes.ok) {
-        const lookupData = await lookupRes.json();
-        const sysId = lookupData.result?.[0]?.sys_id;
-        if (sysId) {
-          await fetchServiceNowAPI(
-            `/api/now/table/incident/${sysId}`,
-            {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ work_notes: workNote }),
-            }
-          );
-          console.log(`[ServiceNow] Worknotes synced for ${incident.number} (sys_id: ${sysId})`);
-        } else {
-          console.warn(`[ServiceNow] Incident ${incident.number} not found in ServiceNow — worknotes not synced.`);
+    // Sync worknotes to ServiceNow only if user opted in (publishToWorknotes flag)
+    if (publishToWorknotes) {
+      try {
+        const workNote = `[CIM Outage Centre - Update #${nextUpdateNumber}] by ${effectiveAuthorName}:\n${comment}`;
+        // First, look up the incident sys_id by number
+        const lookupRes = await fetchServiceNowAPI(
+          `/api/now/table/incident?sysparm_query=number=${encodeURIComponent(incident.number)}&sysparm_fields=sys_id&sysparm_limit=1`,
+          { method: 'GET' }
+        );
+        if (lookupRes.ok) {
+          const lookupData = await lookupRes.json();
+          const sysId = lookupData.result?.[0]?.sys_id;
+          if (sysId) {
+            await fetchServiceNowAPI(
+              `/api/now/table/incident/${sysId}`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ work_notes: workNote }),
+              }
+            );
+            console.log(`[ServiceNow] Worknotes synced for ${incident.number} (sys_id: ${sysId})`);
+          } else {
+            console.warn(`[ServiceNow] Incident ${incident.number} not found in ServiceNow — worknotes not synced.`);
+          }
         }
+      } catch (snErr) {
+        console.error('[ServiceNow] Failed to sync worknotes:', snErr);
       }
-    } catch (snErr) {
-      console.error('[ServiceNow] Failed to sync worknotes:', snErr);
+    } else {
+      console.log(`[ServiceNow] Worknotes sync skipped for ${incident.number} — user opted out.`);
     }
 
     const assignmentGroupEmail = await getAssignmentGroupEmail(updatedIncident.assignmentGroup);
@@ -190,6 +239,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
         ...updatedIncident,
         assignmentGroupEmail,
       },
+      emailPreview,
+      worknotesSynced: publishToWorknotes,
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

@@ -47,6 +47,7 @@ import {
   Trash2,
   Building2,
   Search,
+  Mail,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 import { IncidentData } from '@/components/IncidentCard';
@@ -66,6 +67,15 @@ export default function IncidentDetailsPage() {
   const [submittingUpdate, setSubmittingUpdate] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [publishToWorknotes, setPublishToWorknotes] = useState(true);
+  const [additionalInfo, setAdditionalInfo] = useState('');
+  const [showAdditionalInfo, setShowAdditionalInfo] = useState(false);
+
+  // Email Preview / Review state
+  const [emailPreviewPayload, setEmailPreviewPayload] = useState<any>(null);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [loadingEmailPreview, setLoadingEmailPreview] = useState(false);
 
   // AI Solutions & Related Change Requests state
   const [solutions, setSolutions] = useState<any>(null);
@@ -411,6 +421,8 @@ export default function IncidentDetailsPage() {
           nextCadenceHours,
           isFinalUpdate,
           totalOutageDuration,
+          publishToWorknotes,
+          additionalInfo: showAdditionalInfo ? additionalInfo : '',
         }),
       });
 
@@ -419,16 +431,86 @@ export default function IncidentDetailsPage() {
         setUpdateComment('');
         addToast({
           title: `📝 Update #${data.update.updateNumber} Published`,
-          message: `Generative AI synthesized new executive summary.`,
+          message: `Generative AI synthesized new executive summary. Review the CIM Notification email below.`,
           type: 'update',
         });
         setIncident(data.incident);
         triggerRefresh();
+
+        // Open email preview modal if payload is present
+        if (data.emailPreview) {
+          setEmailPreviewPayload(data.emailPreview);
+          setShowEmailPreview(true);
+        }
       }
     } catch (err) {
       console.error('Failed to post update:', err);
     } finally {
       setSubmittingUpdate(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!incident || !emailPreviewPayload) return;
+    setSendingEmail(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailPreviewPayload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({
+          title: '✅ CIM Notification Sent',
+          message: `Email delivered to ${data.recipientCount ?? 'configured'} recipients.`,
+          type: 'update',
+        });
+      } else {
+        addToast({
+          title: '❌ Email Send Failed',
+          message: data.message || data.error || 'Could not send the CIM notification.',
+          type: 'update',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send CIM email:', err);
+      addToast({
+        title: '❌ Network Error',
+        message: 'Failed to reach the email endpoint.',
+        type: 'update',
+      });
+    } finally {
+      setSendingEmail(false);
+      setShowEmailPreview(false);
+      setEmailPreviewPayload(null);
+    }
+  };
+
+  const handleOpenEmailReview = async () => {
+    if (!incident) return;
+    setLoadingEmailPreview(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/send-email`);
+      const data = await res.json();
+      if (data.success && data.emailPreview) {
+        setEmailPreviewPayload(data.emailPreview);
+        setShowEmailPreview(true);
+      } else {
+        addToast({
+          title: '⚠️ Could not load preview',
+          message: data.error || 'Failed to prepare email notification preview.',
+          type: 'update',
+        });
+      }
+    } catch (e: any) {
+      addToast({
+        title: '❌ Network Error',
+        message: 'Failed to load email preview.',
+        type: 'update',
+      });
+    } finally {
+      setLoadingEmailPreview(false);
     }
   };
 
@@ -517,6 +599,21 @@ export default function IncidentDetailsPage() {
               <BrainCircuit className="w-3.5 h-3.5" />
             )}
             <span>{loadingAiAnalysis ? 'Analysing...' : 'AI Powered Analysis'}</span>
+          </button>
+
+          {/* Review CIM Notification Email Button */}
+          <button
+            onClick={handleOpenEmailReview}
+            disabled={loadingEmailPreview}
+            className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Review and verify all content before publishing on email notification"
+          >
+            {loadingEmailPreview ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Mail className="w-3.5 h-3.5" />
+            )}
+            <span>{loadingEmailPreview ? 'Loading...' : 'Review CIM Email'}</span>
           </button>
 
           <span className="font-mono text-xs text-slate-500">ID: {incident.id}</span>
@@ -863,15 +960,84 @@ export default function IncidentDetailsPage() {
                   </select>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={isFinalUpdate}
-                      onChange={(e) => setIsFinalUpdate(e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-700"
-                    />
-                    Mark as Final Update
+                {/* ── Update Options ── */}
+                <div className="p-3.5 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Update Options</p>
+
+                  {/* 1. Publish to Worknotes */}
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <div className="relative mt-0.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={publishToWorknotes}
+                        onChange={(e) => setPublishToWorknotes(e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-700 focus:ring-0"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">
+                        Publish to Worknotes
+                      </span>
+                      <p className="text-[10px] text-slate-500 leading-snug mt-0.5">
+                        When ON, this update will be synced to the ServiceNow incident work notes automatically.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* 2. Update Additional Info */}
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <div className="relative mt-0.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={showAdditionalInfo}
+                        onChange={(e) => setShowAdditionalInfo(e.target.checked)}
+                        className="w-4 h-4 rounded text-purple-500 bg-slate-800 border-slate-700 focus:ring-0"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">
+                        Update Additional Info
+                      </span>
+                      <p className="text-[10px] text-slate-500 leading-snug mt-0.5">
+                        Provide extra context (root cause hints, actions taken, vendor info) to improve the RCA quality.
+                      </p>
+                    </div>
+                  </label>
+
+                  {showAdditionalInfo && (
+                    <div className="pl-6 space-y-1">
+                      <textarea
+                        rows={3}
+                        placeholder="e.g. Root cause suspected: BGP route flap on CORE-SW-01. Vendor Cisco TAC engaged. No hardware change in last 7 days..."
+                        value={additionalInfo}
+                        onChange={(e) => setAdditionalInfo(e.target.value)}
+                        className="w-full bg-slate-950 border border-purple-500/30 rounded-xl p-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 resize-none"
+                      />
+                      <p className="text-[10px] text-purple-400/70 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        This info is passed to the AI to produce a more accurate RCA — it does not appear in the public update.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 3. Mark as Final Update */}
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <div className="relative mt-0.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isFinalUpdate}
+                        onChange={(e) => setIsFinalUpdate(e.target.checked)}
+                        className="w-4 h-4 rounded text-red-500 bg-slate-800 border-slate-700 focus:ring-0"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">
+                        Mark as Final Update
+                      </span>
+                      <p className="text-[10px] text-slate-500 leading-snug mt-0.5">
+                        Marks this as the last update. The next update will be shown as "N/A" in CIM notifications.
+                      </p>
+                    </div>
                   </label>
                 </div>
 
@@ -900,7 +1066,7 @@ export default function IncidentDetailsPage() {
                   ) : (
                     <Send className="w-4 h-4" />
                   )}
-                  <span>Post Update & Auto-Synthesize AI Executive Summary</span>
+                  <span>Post Update &amp; Auto-Synthesize AI Executive Summary</span>
                 </button>
               </div>
             ) : null}
@@ -1904,6 +2070,194 @@ export default function IncidentDetailsPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CIM Notification Email Preview / Review Modal ── */}
+      {showEmailPreview && emailPreviewPayload && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative bg-slate-950 border border-blue-500/40 rounded-2xl shadow-2xl shadow-blue-500/10 w-full max-w-3xl max-h-[90vh] flex flex-col">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+                  <Send className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Review CIM Notification Email</h2>
+                  <p className="text-[10px] text-slate-400 font-mono">AI has rephrased your update. Review before sending.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowEmailPreview(false); setEmailPreviewPayload(null); }}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
+
+              {/* Subject & Recipients */}
+              <div className="p-3.5 bg-slate-900 border border-slate-700 rounded-xl space-y-2 text-xs">
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-20 shrink-0">Subject:</span>
+                  <span className="text-white font-mono">{emailPreviewPayload.subject}</span>
+                </div>
+                {emailPreviewPayload.extraEmails && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-400 font-semibold w-20 shrink-0">Extra To:</span>
+                    <span className="text-cyan-300 font-mono break-all">{emailPreviewPayload.extraEmails}</span>
+                  </div>
+                )}
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-20 shrink-0">Also To:</span>
+                  <span className="text-slate-300">CIM_UPDATE_RECIPIENTS (configured in Admin settings)</span>
+                </div>
+              </div>
+
+              {/* AI-Rephrased Fields Banner */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-xs text-yellow-300">
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span>Fields marked <span className="font-bold text-yellow-200">⭐ AI-Rephrased</span> were synthesised from your raw update. Review and edit before sending.</span>
+              </div>
+
+              {/* Email Fields Table */}
+              <div className="rounded-xl overflow-hidden border border-slate-800 text-xs">
+
+                {/* Row group: Incident metadata */}
+                <div className="grid grid-cols-3 divide-x divide-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Incident No.</div>
+                  <div className="px-3 py-2 text-white font-mono col-span-2">{emailPreviewPayload.incidentNumber}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Start Date / Time</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.startDate} {emailPreviewPayload.startTime}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Priority</div>
+                  <div className="px-3 py-2 font-bold text-red-400 col-span-2">{emailPreviewPayload.priority}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Incident Manager</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.incidentManager}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Next Update</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.nextUpdate}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Business Impact</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.businessImpact}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Sites Impacted</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.sitesImpacted}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Outage Duration</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.outageDuration}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Assignment Group</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.assignmentGroup}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Related Incidents</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.relatedIncidents}</div>
+                </div>
+
+                {/* ⭐ AI-Rephrased: Issue Summary — editable */}
+                <div className="border-t border-slate-800">
+                  <div className="bg-yellow-500/10 px-3 py-2 font-semibold text-yellow-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" /> ⭐ Issue Summary <span className="text-[9px] text-yellow-500 font-normal">(AI-Rephrased — editable)</span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={emailPreviewPayload.issueSummary}
+                    onChange={(e) => setEmailPreviewPayload((p: any) => ({ ...p, issueSummary: e.target.value }))}
+                    className="w-full bg-slate-950 px-3 py-2 text-white leading-relaxed focus:outline-none focus:bg-slate-900 resize-none"
+                  />
+                </div>
+
+                {/* ⭐ AI-Rephrased: Resolution Status — editable bullets */}
+                <div className="border-t border-slate-800">
+                  <div className="bg-yellow-500/10 px-3 py-2 font-semibold text-yellow-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" /> ⭐ Resolution Status <span className="text-[9px] text-yellow-500 font-normal">(AI-Rephrased — one item per line)</span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={(emailPreviewPayload.resolutionBullets as string[]).join('\n')}
+                    onChange={(e) => setEmailPreviewPayload((p: any) => ({ ...p, resolutionBullets: e.target.value.split('\n') }))}
+                    className="w-full bg-slate-950 px-3 py-2 text-white leading-relaxed focus:outline-none focus:bg-slate-900 resize-none"
+                  />
+                </div>
+
+                {/* ⭐ AI-Rephrased: Overall Status — editable */}
+                <div className="border-t border-slate-800">
+                  <div className="bg-yellow-500/10 px-3 py-2 font-semibold text-yellow-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" /> ⭐ Overall Status & ETA <span className="text-[9px] text-yellow-500 font-normal">(AI-Rephrased — editable)</span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={emailPreviewPayload.overallStatus}
+                    onChange={(e) => setEmailPreviewPayload((p: any) => ({ ...p, overallStatus: e.target.value }))}
+                    className="w-full bg-slate-950 px-3 py-2 text-white leading-relaxed focus:outline-none focus:bg-slate-900 resize-none"
+                  />
+                </div>
+
+                {/* Remaining metadata */}
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Teams Involved</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.teamsInvolved}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Partner Lead</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.partnerLead}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">C&D IT Coordinator</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.itCoordinator}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Stakeholders</div>
+                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.stakeholders}</div>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Teams Bridge Link</div>
+                  <div className="px-3 py-2 text-blue-400 col-span-2 truncate">{emailPreviewPayload.teamsLink}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <p className="text-[10px] text-slate-500">Changes made above are applied to the email only and do not modify the incident record.</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => { setShowEmailPreview(false); setEmailPreviewPayload(null); }}
+                  disabled={sendingEmail}
+                  className="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
+                >
+                  Skip / Don&apos;t Send
+                </button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail}
+                  className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50"
+                >
+                  {sendingEmail ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  {sendingEmail ? 'Sending...' : 'Send Email Now'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

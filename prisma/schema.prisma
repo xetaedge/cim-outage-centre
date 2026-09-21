@@ -53,6 +53,7 @@ model Incident {
   partnerLead            String?
   cdItCoordinator        String?
   stakeholdersInformed   String?
+  additionalInfo         String?          // Extra RCA context added by the Incident Manager during updates
 
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt

@@ -60,6 +60,7 @@ INCIDENT DETAILS:
 - Total Outage Duration: ${incident.totalOutageDuration || 'N/A'}
 - Opened At: ${incident.openedAt?.toISOString() || 'N/A'}
 - Resolved At: ${incident.resolvedAt?.toISOString() || 'N/A'}
+${(incident as any).additionalInfo ? `- Additional Operational / RCA Info: ${(incident as any).additionalInfo}` : ''}
 
 TIMELINE UPDATES (chronological):
 ${updateNotes.map(u => `[Update #${u.updateNumber}] (${u.timestamp}) by ${u.author}: ${u.comment}`).join('\n')}
