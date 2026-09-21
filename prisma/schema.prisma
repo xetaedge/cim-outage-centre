@@ -105,14 +105,15 @@ model IncidentSite {
 }
 
 model IncidentUpdate {
-  id           String   @id @default(uuid())
-  incidentId   String
-  updateNumber Int
-  comment      String
-  authorName   String
-  isFinal      Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  incidentId     String
+  updateNumber   Int
+  comment        String
+  authorName     String
+  isFinal        Boolean  @default(false)
+  additionalInfo String?
+  createdAt      DateTime @default(now())
+  incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 }
 
 model HistoricalIncident {

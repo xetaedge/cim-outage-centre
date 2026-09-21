@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { getAssignmentGroupEmail } from '@/lib/email';
+import { verifyToken } from '@/lib/auth';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
+
+    const cookieStore = cookies();
+    const token = cookieStore.get('cim_token')?.value;
+    const session = token ? verifyToken(token) : null;
+    const isGuest = session?.role === 'GUEST';
 
     const incident = await prisma.incident.findFirst({
       where: { OR: [{ id }, { number: id }] },
@@ -28,10 +35,23 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const assignmentGroupEmail = await getAssignmentGroupEmail(incident.assignmentGroup);
 
+    // Sanitize internal additionalInfo if requester is a GUEST
+    let sanitizedIncident: any = incident;
+    if (isGuest) {
+      const { additionalInfo, ...restIncident } = incident;
+      sanitizedIncident = {
+        ...restIncident,
+        updates: incident.updates.map((u: any) => {
+          const { additionalInfo, ...restUpdate } = u;
+          return restUpdate;
+        }),
+      };
+    }
+
     return NextResponse.json({
       success: true,
       incident: {
-        ...incident,
+        ...sanitizedIncident,
         assignmentGroupEmail,
       },
     });

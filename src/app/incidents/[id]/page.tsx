@@ -48,6 +48,7 @@ import {
   Building2,
   Search,
   Mail,
+  Info,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 import { IncidentData } from '@/components/IncidentCard';
@@ -411,6 +412,8 @@ export default function IncidentDetailsPage() {
     if (!incident || !updateComment.trim()) return;
     setSubmittingUpdate(true);
 
+    const isAdditionalInfoSelected = Boolean(showAdditionalInfo && additionalInfo.trim());
+
     try {
       const res = await fetch(`/api/incidents/${incident.id}/updates`, {
         method: 'POST',
@@ -429,18 +432,33 @@ export default function IncidentDetailsPage() {
       const data = await res.json();
       if (data.success) {
         setUpdateComment('');
-        addToast({
-          title: `📝 Update #${data.update.updateNumber} Published`,
-          message: `Generative AI synthesized new executive summary. Review the CIM Notification email below.`,
-          type: 'update',
-        });
+        if (showAdditionalInfo) {
+          setAdditionalInfo('');
+          setShowAdditionalInfo(false);
+        }
+
         setIncident(data.incident);
         triggerRefresh();
 
-        // Open email preview modal if payload is present
-        if (data.emailPreview) {
-          setEmailPreviewPayload(data.emailPreview);
-          setShowEmailPreview(true);
+        // If Additional Info was selected, do NOT trigger email per requirement
+        if (isAdditionalInfoSelected || data.emailSuppressed) {
+          addToast({
+            title: `📝 Update #${data.update.updateNumber} Published`,
+            message: `Update recorded with internal additional info (email notification suppressed).`,
+            type: 'update',
+          });
+        } else {
+          addToast({
+            title: `📝 Update #${data.update.updateNumber} Published`,
+            message: `Generative AI synthesized new executive summary. Review the CIM Notification email below.`,
+            type: 'update',
+          });
+
+          // Open email preview modal if payload is present and email was not suppressed
+          if (data.emailPreview) {
+            setEmailPreviewPayload(data.emailPreview);
+            setShowEmailPreview(true);
+          }
         }
       }
     } catch (err) {
@@ -909,10 +927,26 @@ export default function IncidentDetailsPage() {
               {incident.updates?.map((u) => (
                 <div
                   key={u.id}
-                  className="p-4 bg-slate-900/90 border border-slate-800 rounded-xl space-y-1.5 text-xs"
+                  className="p-4 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2 text-xs hover:border-slate-700 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-blue-400 text-xs">Update #{u.updateNumber}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-blue-400 text-xs">Update #{u.updateNumber}</span>
+                      {u.isFinal && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">
+                          FINAL
+                        </span>
+                      )}
+                      {currentRole !== 'GUEST' && u.additionalInfo && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                          title="Internal additional info (visible to staff only)"
+                        >
+                          <Info className="w-3 h-3 text-purple-400" />
+                          <span>Internal Info</span>
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-slate-400 font-mono">
                       {new Date(u.createdAt).toLocaleTimeString([], {
                         hour: '2-digit',
@@ -920,7 +954,22 @@ export default function IncidentDetailsPage() {
                       })}
                     </span>
                   </div>
+
                   <p className="text-slate-200 font-medium leading-relaxed">{u.comment}</p>
+
+                  {/* Internal Additional Info for RCA (Visible to Admin, Managers, Incident Managers only; hidden from Guests) */}
+                  {currentRole !== 'GUEST' && u.additionalInfo && (
+                    <div className="mt-2 p-2.5 bg-purple-950/40 border border-purple-800/40 rounded-xl space-y-1">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-purple-300">
+                        <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span>Additional Information (Internal / RCA Context)</span>
+                      </div>
+                      <p className="text-[11px] text-purple-200/90 font-mono leading-relaxed pl-5 whitespace-pre-wrap">
+                        {u.additionalInfo}
+                      </p>
+                    </div>
+                  )}
+
                   <span className="text-[10px] text-slate-500 block">By: {u.authorName}</span>
                 </div>
               ))}

@@ -57,6 +57,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         comment,
         authorName: effectiveAuthorName,
         isFinal: isFinalUpdate,
+        ...(additionalInfo && additionalInfo.trim() ? { additionalInfo: additionalInfo.trim() } : {}),
       },
     });
 
@@ -148,53 +149,58 @@ export async function POST(request: Request, { params }: { params: { id: string 
       },
     });
 
-    // Build CIM Email Preview payload (email is NOT sent yet — returned to client for review)
+    // Build CIM Email Preview payload only if "Update Additional Info" is NOT selected
+    // (Per user requirement: when selecting "Update Additional Info", it should NOT trigger an email)
+    const isAdditionalInfoSelected = Boolean(additionalInfo && additionalInfo.trim());
     let emailPreview: Record<string, any> | null = null;
-    try {
-      const startDt = new Date(incident.openedAt);
-      const diffMs = Date.now() - startDt.getTime();
-      const diffHrs = Math.floor(diffMs / 3600000);
-      const diffMins = Math.floor((diffMs % 3600000) / 60000);
-      const outageDuration = `${diffHrs}h ${diffMins}m`;
 
-      const updateSeqStr = isFinalUpdate ? 'FINAL' : nextUpdateNumber.toString();
+    if (!isAdditionalInfoSelected) {
+      try {
+        const startDt = new Date(incident.openedAt);
+        const diffMs = Date.now() - startDt.getTime();
+        const diffHrs = Math.floor(diffMs / 3600000);
+        const diffMins = Math.floor((diffMs % 3600000) / 60000);
+        const outageDuration = `${diffHrs}h ${diffMins}m`;
 
-      const resolutionBullets = updatedIncident.aiDoneSoFar
-        ? updatedIncident.aiDoneSoFar.split('\n').filter((l: string) => l.trim()).map((l: string) => l.replace(/^[-*]\s*/, ''))
-        : ['Investigating'];
+        const updateSeqStr = isFinalUpdate ? 'FINAL' : nextUpdateNumber.toString();
 
-      // Fetch Assignment Group email and site emails for recipient preview
-      const agEmail = await getAssignmentGroupEmail(incident.assignmentGroup);
-      const siteEmails = getSiteEmails(incident.sites);
-      const extraEmails = [agEmail, siteEmails].filter(Boolean).join(',');
+        const resolutionBullets = updatedIncident.aiDoneSoFar
+          ? updatedIncident.aiDoneSoFar.split('\n').filter((l: string) => l.trim()).map((l: string) => l.replace(/^[-*]\s*/, ''))
+          : ['Investigating'];
 
-      emailPreview = {
-        subject: `Priority Incident Update - ${incident.number}`,
-        updateSequence: updateSeqStr,
-        incidentNumber: incident.number,
-        startDate: startDt.toLocaleDateString(),
-        startTime: startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        priority: incident.priority,
-        incidentManager: incident.assignedTo || 'Unassigned',
-        nextUpdate: isFinalUpdate ? 'N/A' : nextDueTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        businessImpact: updatedIncident.aiBusinessImpact || 'Under Evaluation',
-        sitesImpacted: siteNames.length > 0 ? siteNames.join(', ') : 'Global',
-        outageDuration: isFinalUpdate && totalOutageDuration ? totalOutageDuration : outageDuration,
-        assignmentGroup: incident.assignmentGroup || 'General',
-        relatedIncidents: updatedIncident.relatedIncidents || 'None',
-        // AI-rephrased fields — shown prominently in the review modal
-        issueSummary: updatedIncident.issueSummary || comment,
-        resolutionBullets,
-        overallStatus: updatedIncident.aiCurrentStatusSummary || updatedIncident.status,
-        teamsInvolved: updatedIncident.teamsInvolved || 'N/A',
-        partnerLead: updatedIncident.partnerLead || 'N/A',
-        itCoordinator: updatedIncident.cdItCoordinator || 'N/A',
-        stakeholders: updatedIncident.stakeholdersInformed || 'N/A',
-        teamsLink: incident.teamsBridgeLink || '#',
-        extraEmails,
-      };
-    } catch (emailErr) {
-      console.error('Failed to build CIM email preview:', emailErr);
+        // Fetch Assignment Group email and site emails for recipient preview
+        const agEmail = await getAssignmentGroupEmail(incident.assignmentGroup);
+        const siteEmails = getSiteEmails(incident.sites);
+        const extraEmails = [agEmail, siteEmails].filter(Boolean).join(',');
+
+        emailPreview = {
+          subject: `Priority Incident Update - ${incident.number}`,
+          updateSequence: updateSeqStr,
+          incidentNumber: incident.number,
+          startDate: startDt.toLocaleDateString(),
+          startTime: startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          priority: incident.priority,
+          incidentManager: incident.assignedTo || 'Unassigned',
+          nextUpdate: isFinalUpdate ? 'N/A' : nextDueTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          businessImpact: updatedIncident.aiBusinessImpact || 'Under Evaluation',
+          sitesImpacted: siteNames.length > 0 ? siteNames.join(', ') : 'Global',
+          outageDuration: isFinalUpdate && totalOutageDuration ? totalOutageDuration : outageDuration,
+          assignmentGroup: incident.assignmentGroup || 'General',
+          relatedIncidents: updatedIncident.relatedIncidents || 'None',
+          // AI-rephrased fields — shown prominently in the review modal
+          issueSummary: updatedIncident.issueSummary || comment,
+          resolutionBullets,
+          overallStatus: updatedIncident.aiCurrentStatusSummary || updatedIncident.status,
+          teamsInvolved: updatedIncident.teamsInvolved || 'N/A',
+          partnerLead: updatedIncident.partnerLead || 'N/A',
+          itCoordinator: updatedIncident.cdItCoordinator || 'N/A',
+          stakeholders: updatedIncident.stakeholdersInformed || 'N/A',
+          teamsLink: incident.teamsBridgeLink || '#',
+          extraEmails,
+        };
+      } catch (emailErr) {
+        console.error('Failed to build CIM email preview:', emailErr);
+      }
     }
 
     // Sync worknotes to ServiceNow only if user opted in (publishToWorknotes flag)
@@ -240,6 +246,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         assignmentGroupEmail,
       },
       emailPreview,
+      emailSuppressed: isAdditionalInfoSelected,
       worknotesSynced: publishToWorknotes,
     });
   } catch (err: any) {

@@ -31,6 +31,8 @@ export interface TimelineUpdate {
   comment: string;
   authorName: string;
   createdAt: string;
+  isFinal?: boolean;
+  additionalInfo?: string;
 }
 
 export interface IncidentData {
