@@ -487,18 +487,44 @@ export async function fetchTeamsMeetingTranscriptDetails(
     }
 
     // Meeting found, now query its transcripts
-    const transRes = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
+    // Meeting found, query its transcripts with retry across Microsoft Graph edge nodes during tenant policy propagation
+    let transRes: any = null;
+    let transData: any = null;
+    let lastTransErr: any = null;
 
-    if (!transRes.ok) {
-      const errData = await transRes.json().catch(() => ({}));
-      const innerCode = errData?.error?.innerError?.code || errData?.innerError?.code || '';
-      const errMsg = errData?.error?.message || errData?.message || '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      transRes = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (transRes.ok) {
+        transData = await transRes.json();
+        break;
+      }
+
+      lastTransErr = await transRes.json().catch(() => ({}));
+      const innerCode = lastTransErr?.error?.innerError?.code || lastTransErr?.innerError?.code || '';
+      const errMsg = lastTransErr?.error?.message || lastTransErr?.message || '';
 
       if (
         transRes.status === 403 &&
+        (innerCode === 'GraphAccessToTranscriptsDisabled' || errMsg.includes('transcripts is disabled'))
+      ) {
+        // Wait and retry across edge proxies
+        await new Promise(r => setTimeout(r, 800));
+        continue;
+      } else {
+        break;
+      }
+    }
+
+    if (!transRes || !transRes.ok) {
+      const innerCode = lastTransErr?.error?.innerError?.code || lastTransErr?.innerError?.code || '';
+      const errMsg = lastTransErr?.error?.message || lastTransErr?.message || '';
+
+      if (
+        transRes?.status === 403 &&
         (innerCode === 'GraphAccessToTranscriptsDisabled' || errMsg.includes('transcripts is disabled'))
       ) {
         return {
@@ -507,15 +533,15 @@ export async function fetchTeamsMeetingTranscriptDetails(
           hasMeeting: true,
           transcriptsFound: 0,
           errorCode: 'GraphAccessToTranscriptsDisabled',
-          error: 'Graph API access to transcripts is disabled for this tenant.',
+          error: 'Microsoft Teams tenant policy is propagating. If you just toggled this On in Teams Admin Center, changes take 15–30 minutes to replicate across all Microsoft regional servers.',
           adminActionRequired: true,
           instructions: [
             'Sign in to the Microsoft Teams Admin Center (https://admin.teams.microsoft.com/)',
             'Go to Meetings > Meeting settings',
             'Scroll down to the "Transcript API access" section',
-            'Toggle "Microsoft Graph access" to On',
-            'Toggle "Include speaker attribution" to On, then click Save',
-            'PowerShell Alternative: Set-CsTeamsMeetingConfiguration -EnableGraphTranscriptAccess $true -EnableAttributedTranscripts $true -Identity Global'
+            'Ensure "Microsoft Graph access" is set to On',
+            'Ensure "Include speaker attribution" is set to On, then click Save',
+            'Note: Microsoft cloud propagation across global regions takes approximately 15–30 minutes after saving.'
           ]
         };
       }
@@ -525,8 +551,8 @@ export async function fetchTeamsMeetingTranscriptDetails(
         meetingId: meeting.id,
         hasMeeting: true,
         transcriptsFound: 0,
-        errorCode: `HttpError_${transRes.status}`,
-        error: errMsg || `Failed to fetch meeting transcripts (HTTP ${transRes.status})`
+        errorCode: `HttpError_${transRes?.status || 500}`,
+        error: errMsg || `Failed to fetch meeting transcripts (HTTP ${transRes?.status || 500})`
       };
     }
 

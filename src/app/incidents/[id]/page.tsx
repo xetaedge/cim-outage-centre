@@ -2751,24 +2751,24 @@ export default function IncidentDetailsPage() {
                     </button>
                   </div>
 
-                  {/* Tenant Policy Warning if Graph API Transcript Access is disabled */}
-                  {whisperData?.graphStatus?.errorCode === 'GraphAccessToTranscriptsDisabled' && (
+                  {/* Tenant Policy Warning if Graph API Transcript Access is disabled or propagating */}
+                  {whisperData?.graphStatus?.errorCode === 'GraphAccessToTranscriptsDisabled' && (!whisperData?.liveDiscussionLines || whisperData.liveDiscussionLines.length === 0) && (
                     <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl space-y-3 text-xs text-amber-200">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
                           <AlertTriangle className="w-5 h-5" />
                         </div>
                         <div className="space-y-1">
-                          <h4 className="font-bold text-amber-300 text-sm">Action Required: Teams Tenant Graph Transcript Access Is Disabled</h4>
+                          <h4 className="font-bold text-amber-300 text-sm">Teams Tenant Graph Transcript Access: Syncing / Replication in Progress</h4>
                           <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                            Your Azure AD application permission (<code className="font-mono bg-amber-950/60 px-1 py-0.5 rounded text-amber-300">OnlineMeetingTranscript.Read.All</code>) is active, but Microsoft requires a tenant-level policy toggle in Microsoft Teams to allow Graph API to read meeting transcripts.
+                            If you have already toggled <strong>Microsoft Graph access</strong> to <strong>On</strong> in the Teams Admin Center, Microsoft takes approximately <strong>15–30 minutes</strong> to propagate the policy change across all global Microsoft 365 cloud servers.
                           </p>
                         </div>
                       </div>
 
                       <div className="bg-slate-950/80 border border-amber-500/20 rounded-xl p-3.5 space-y-2 text-[11px]">
                         <p className="font-semibold text-white flex items-center gap-1.5">
-                          <span>How to enable this in your Microsoft 365 Tenant:</span>
+                          <span>Configuration Checklist in Microsoft Teams Admin Center:</span>
                         </p>
                         <ol className="list-decimal list-inside space-y-1.5 text-slate-300">
                           <li>
@@ -2778,24 +2778,21 @@ export default function IncidentDetailsPage() {
                             In the left sidebar, click <strong>Meetings</strong> &gt; <strong>Meeting settings</strong>
                           </li>
                           <li>
-                            Scroll down to the <strong>Transcript API access</strong> section
+                            Under <strong>Transcript API access</strong>, ensure <strong>Microsoft Graph access</strong> is <strong className="text-emerald-400">On</strong>
                           </li>
                           <li>
-                            Set <strong>Microsoft Graph access</strong> to <strong className="text-emerald-400">On</strong>
-                          </li>
-                          <li>
-                            Set <strong>Include speaker attribution</strong> to <strong className="text-emerald-400">On</strong>, then click <strong>Save</strong>
+                            Ensure <strong>Include speaker attribution</strong> is <strong className="text-emerald-400">On</strong>, then click <strong>Save</strong>
                           </li>
                         </ol>
-                        <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 font-mono">
-                          Teams PowerShell: Set-CsTeamsMeetingConfiguration -EnableGraphTranscriptAccess $true -EnableAttributedTranscripts $true -Identity Global
+                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                          <span>If already saved, click &quot;Sync from Teams&quot; to test edge server synchronization.</span>
                         </div>
                       </div>
 
                       <div className="p-2.5 bg-teal-500/10 border border-teal-500/20 rounded-xl flex items-center justify-between text-[11px] text-teal-300">
                         <span className="flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                          <span><strong>Immediate Workaround:</strong> Click <strong>&quot;Edit / Paste Notes&quot;</strong> below or use the Webhook to add notes directly!</span>
+                          <span><strong>Immediate Option:</strong> You can click <strong>&quot;Edit / Paste Notes&quot;</strong> below or use the Webhook to add notes directly!</span>
                         </span>
                         <button
                           onClick={() => setIsEditingNotes(true)}
