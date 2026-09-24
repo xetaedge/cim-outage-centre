@@ -543,51 +543,75 @@ export async function fetchTeamsMeetingTranscriptDetails(
       };
     }
 
-    // Retrieve content of the latest transcript
-    const latestTranscript = transcriptList[transcriptList.length - 1];
-    const contentRes = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts/${latestTranscript.id}/content?$format=text/vtt`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
+    // Retrieve content of transcripts (fetch across available sessions with retry for edge-propagation)
+    const allParsedLines: string[] = [];
+    let lastError = '';
 
-    if (!contentRes.ok) {
+    for (const tItem of transcriptList) {
+      const tid = tItem.id;
+      if (!tid) continue;
+
+      let contentRes: any = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        contentRes = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts/${tid}/content?$format=text/vtt`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Accept': 'text/vtt',
+            },
+          }
+        );
+        if (contentRes.ok) break;
+        if (contentRes.status === 403) {
+          // If edge node is still caching pre-toggle tenant policy, wait briefly and retry
+          await new Promise(r => setTimeout(r, 700));
+        } else {
+          break;
+        }
+      }
+
+      if (contentRes && contentRes.ok) {
+        const vttText = await contentRes.text();
+        const rawLines = vttText.split(/\r?\n/);
+        for (const rawLine of rawLines) {
+          const line = rawLine.trim();
+          if (!line || line.startsWith('WEBVTT') || line.includes('-->') || /^\d+$/.test(line) || line.startsWith('NOTE')) {
+            continue;
+          }
+          // Parse <v Speaker Name>Speech</v>
+          const speakerMatch = line.match(/<v\s+([^>]+)>(.*?)<\/v>/i);
+          if (speakerMatch) {
+            const speaker = speakerMatch[1].trim();
+            const speech = speakerMatch[2].replace(/<[^>]+>/g, '').trim();
+            if (speech) {
+              allParsedLines.push(`[${speaker}]: ${speech}`);
+            }
+          } else {
+            const clean = line.replace(/<[^>]+>/g, '').trim();
+            if (clean.length > 2) {
+              allParsedLines.push(clean);
+            }
+          }
+        }
+      } else if (contentRes) {
+        lastError = `HTTP ${contentRes.status}`;
+      }
+    }
+
+    if (allParsedLines.length === 0 && lastError) {
       return {
         lines: [],
         meetingId: meeting.id,
         hasMeeting: true,
         transcriptsFound: transcriptList.length,
         errorCode: 'ContentFetchFailed',
-        error: `Transcript exists but failed to download content (HTTP ${contentRes.status})`
+        error: `Found ${transcriptList.length} transcript sessions but content synchronization is in progress (${lastError}).`
       };
     }
 
-    const vttText = await contentRes.text();
-    const rawLines = vttText.split(/\r?\n/);
-    const parsedLines: string[] = [];
-
-    for (const rawLine of rawLines) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith('WEBVTT') || line.includes('-->') || /^\d+$/.test(line)) {
-        continue;
-      }
-      // Parse <v Speaker Name>Speech</v>
-      const speakerMatch = line.match(/<v\s+([^>]+)>(.*?)<\/v>/i);
-      if (speakerMatch) {
-        const speaker = speakerMatch[1].trim();
-        const speech = speakerMatch[2].replace(/<[^>]+>/g, '').trim();
-        if (speech) {
-          parsedLines.push(`[${speaker}]: ${speech}`);
-        }
-      } else {
-        const clean = line.replace(/<[^>]+>/g, '').trim();
-        if (clean.length > 2) {
-          parsedLines.push(clean);
-        }
-      }
-    }
-
     return {
-      lines: parsedLines.slice(-50),
+      lines: allParsedLines.slice(-60),
       meetingId: meeting.id,
       hasMeeting: true,
       transcriptsFound: transcriptList.length
