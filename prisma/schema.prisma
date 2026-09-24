@@ -55,10 +55,16 @@ model Incident {
   stakeholdersInformed   String?
   additionalInfo         String?          // Extra RCA context added by the Incident Manager during updates
 
+  // Whisper AI Telemetry & Meeting Integration
+  whisperLatestNotes     String?
+  whisperLatestSummary   String?
+  whisperLastSyncedAt    DateTime?
+
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   updates                IncidentUpdate[]
   sites                  IncidentSite[]
+  transcripts            IncidentTranscript[]
 }
 
 model Site {
@@ -112,6 +118,21 @@ model IncidentUpdate {
   authorName     String
   isFinal        Boolean  @default(false)
   additionalInfo String?
+  createdAt      DateTime @default(now())
+  incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model IncidentTranscript {
+  id             String   @id @default(uuid())
+  incidentId     String
+  title          String?  @default("Teams Bridge Discussion")
+  meetingUrl     String?
+  transcriptText String
+  notes          String?
+  summary        String?
+  actionItems    String?
+  source         String   @default("TEAMS_FACILITATOR") // TEAMS_FACILITATOR, GRAPH_API, MANUAL_INGEST
+  capturedBy     String?  @default("Whisper AI")
   createdAt      DateTime @default(now())
   incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 }

@@ -49,6 +49,10 @@ import {
   Search,
   Mail,
   Info,
+  Mic,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 import { IncidentData } from '@/components/IncidentCard';
@@ -93,6 +97,22 @@ export default function IncidentDetailsPage() {
   const [snTelemetry, setSnTelemetry] = useState<any>(null);
   const [loadingAiAnalysis, setLoadingAiAnalysis] = useState(false);
   const [showAiAnalysis, setShowAiAnalysis] = useState(false);
+
+  // Whisper AI State
+  const [showWhisperModal, setShowWhisperModal] = useState(false);
+  const [whisperTab, setWhisperTab] = useState<'live' | 'transcription' | 'archive'>('live');
+  const [whisperData, setWhisperData] = useState<any>(null);
+  const [loadingWhisper, setLoadingWhisper] = useState(false);
+  const [loadingWhisperSuggest, setLoadingWhisperSuggest] = useState(false);
+  const [whisperSuggestion, setWhisperSuggestion] = useState<any>(null);
+  const [fullTranscriptInput, setFullTranscriptInput] = useState('');
+  const [transcriptTitleInput, setTranscriptTitleInput] = useState('');
+  const [savingTranscript, setSavingTranscript] = useState(false);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedTranscript, setCopiedTranscript] = useState(false);
+  const [manualNotesInput, setManualNotesInput] = useState('');
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
 
   // Location Management & ServiceNow Refresh state
   const [refreshingServiceNow, setRefreshingServiceNow] = useState(false);
@@ -532,6 +552,229 @@ export default function IncidentDetailsPage() {
     }
   };
 
+  // ── Whisper AI Handlers ──
+  const fetchWhisperData = async () => {
+    if (!incident) return;
+    setLoadingWhisper(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/whisper`);
+      const data = await res.json();
+      if (data.success) {
+        setWhisperData(data);
+        if (data.facilitatorNotes) {
+          setManualNotesInput(data.facilitatorNotes);
+        }
+        if (data.liveDiscussionLines && data.liveDiscussionLines.length > 0) {
+          setFullTranscriptInput(data.liveDiscussionLines.join('\n'));
+        }
+        if (data.latestSummary && !whisperSuggestion) {
+          setWhisperSuggestion({
+            suggestedSummary: data.latestSummary,
+            focusArea: 'Bridge Consensus',
+            keyHighlights: [],
+            actionItems: [],
+            bridgeStatus: 'TRIAGING_ROOT_CAUSE',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch Whisper data:', err);
+    } finally {
+      setLoadingWhisper(false);
+    }
+  };
+
+  const handleGenerateWhisperSuggest = async () => {
+    if (!incident) return;
+    setLoadingWhisperSuggest(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/whisper/suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notes: manualNotesInput || whisperData?.facilitatorNotes || '',
+          transcriptLines: whisperData?.liveDiscussionLines || [],
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWhisperSuggestion(data);
+        addToast({
+          title: '🎙️ Whisper AI Suggested Update',
+          message: 'Synthesized latest Teams discussion notes into timeline update.',
+          type: 'update',
+        });
+      } else {
+        addToast({
+          title: '⚠️ Suggestion Failed',
+          message: data.error || 'Failed to synthesize Teams notes.',
+          type: 'update',
+        });
+      }
+    } catch (err) {
+      console.error('Whisper suggest error:', err);
+    } finally {
+      setLoadingWhisperSuggest(false);
+    }
+  };
+
+  const handleQuickWhisperSuggest = async () => {
+    if (!incident) return;
+    setLoadingWhisperSuggest(true);
+    try {
+      const syncRes = await fetch(`/api/incidents/${incident.id}/whisper`);
+      const syncData = await syncRes.json();
+      const lines = syncData?.liveDiscussionLines || [];
+      const notes = syncData?.facilitatorNotes || '';
+
+      const res = await fetch(`/api/incidents/${incident.id}/whisper/suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes, transcriptLines: lines }),
+      });
+      const data = await res.json();
+      if (data.success && data.suggestedSummary) {
+        setWhisperSuggestion(data);
+        setUpdateComment(data.suggestedSummary);
+        addToast({
+          title: '🎙️ Whisper AI: Update Suggested & Inserted',
+          message: 'Discussion notes converted to timeline update. Review and post below!',
+          type: 'update',
+        });
+        const el = document.getElementById('post-update-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }
+    } catch (e) {
+      console.error('Quick whisper error:', e);
+    } finally {
+      setLoadingWhisperSuggest(false);
+    }
+  };
+
+  const handleInsertWhisperSummary = (summaryText: string) => {
+    if (!summaryText) return;
+    setUpdateComment((prev) => (prev ? `${prev}\n\n${summaryText}` : summaryText));
+    setShowWhisperModal(false);
+    addToast({
+      title: '📋 Inserted into Timeline Update',
+      message: 'Whisper AI summary inserted into post form.',
+      type: 'update',
+    });
+    setTimeout(() => {
+      const el = document.getElementById('post-update-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  const handleSaveFullTranscription = async () => {
+    if (!incident) return;
+    const textToSave = fullTranscriptInput.trim() || (whisperData?.liveDiscussionLines || []).join('\n') || manualNotesInput.trim();
+    if (!textToSave) {
+      addToast({
+        title: '⚠️ No Transcript Text',
+        message: 'Please provide or fetch transcript lines before saving.',
+        type: 'update',
+      });
+      return;
+    }
+
+    setSavingTranscript(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/whisper/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcriptText: textToSave,
+          notes: manualNotesInput || whisperData?.facilitatorNotes,
+          summary: whisperSuggestion?.suggestedSummary || whisperData?.latestSummary,
+          actionItems: whisperSuggestion?.actionItems,
+          meetingTitle: transcriptTitleInput || `Teams Command Bridge - ${incident.number}`,
+          meetingUrl: incident.teamsBridgeLink,
+          source: 'TEAMS_FACILITATOR',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({
+          title: '💾 Full Transcription Archived',
+          message: 'Complete meeting transcript stored to permanent incident records.',
+          type: 'update',
+        });
+        fetchWhisperData();
+        setWhisperTab('archive');
+      } else {
+        addToast({
+          title: '❌ Save Failed',
+          message: data.error || 'Failed to archive transcript.',
+          type: 'update',
+        });
+      }
+    } catch (err) {
+      console.error('Save transcript error:', err);
+    } finally {
+      setSavingTranscript(false);
+    }
+  };
+
+  const handleSaveManualNotes = async () => {
+    if (!incident) return;
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/whisper`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: manualNotesInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsEditingNotes(false);
+        addToast({
+          title: '✅ Meeting Notes Saved',
+          message: 'Facilitator discussion notes updated.',
+          type: 'update',
+        });
+        fetchWhisperData();
+      }
+    } catch (e) {
+      console.error('Failed to save notes:', e);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleCopyWebhookUrl = () => {
+    const url = `${window.location.origin}/api/incidents/${incident?.id}/whisper/ingest`;
+    navigator.clipboard.writeText(url);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2500);
+    addToast({
+      title: '📋 Webhook URL Copied',
+      message: 'Point your Teams Facilitator app to this URL.',
+      type: 'update',
+    });
+  };
+
+  const handleCopyTranscript = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedTranscript(true);
+    setTimeout(() => setCopiedTranscript(false), 2500);
+    addToast({
+      title: '📋 Transcript Copied',
+      message: 'Meeting transcript copied to clipboard.',
+      type: 'update',
+    });
+  };
+
+  const handleDownloadTranscript = (text: string, title?: string) => {
+    const element = document.createElement('a');
+    const file = new Blob([text], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = `${incident?.number || 'incident'}_teams_transcript_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
   if (loading) {
     return (
       <div className="glass-card p-12 text-center border border-slate-800 space-y-4 rounded-2xl">
@@ -632,6 +875,22 @@ export default function IncidentDetailsPage() {
               <Mail className="w-3.5 h-3.5" />
             )}
             <span>{loadingEmailPreview ? 'Loading...' : 'Review CIM Email'}</span>
+          </button>
+
+          {/* Whisper AI Teams Meeting Intelligence Button */}
+          <button
+            onClick={() => {
+              setShowWhisperModal(true);
+              fetchWhisperData();
+            }}
+            className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-teal-500/20 transition-all transform hover:scale-[1.02]"
+            title="Whisper AI: Real-time Teams bridge notes, suggested update summary & transcription archive"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span>Whisper AI</span>
+            {incident.teamsBridgeLink && (
+              <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" title="Teams Bridge Live" />
+            )}
           </button>
 
           <span className="font-mono text-xs text-slate-500">ID: {incident.id}</span>
@@ -976,7 +1235,54 @@ export default function IncidentDetailsPage() {
             </div>
 
             {currentRole !== 'GUEST' && !isClosed ? (
-              <div className="pt-4 border-t border-slate-800 space-y-3">
+              <div id="post-update-section" className="pt-4 border-t border-slate-800 space-y-3">
+                {/* Whisper AI Live Quick-Assist Banner */}
+                <div className="p-3 bg-gradient-to-r from-teal-950/40 via-cyan-950/20 to-slate-900 border border-teal-500/30 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-500/40 flex items-center justify-center shrink-0">
+                      <Mic className="w-4 h-4 text-teal-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">Whisper AI: Teams Bridge Notes</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-mono font-bold border border-teal-500/30">
+                          FACILITATOR LINKED
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        {whisperData?.facilitatorNotes
+                          ? 'Latest discussion notes ready from Teams facilitator'
+                          : 'Fetch live discussion notes & suggest timeline update with Gemini AI'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        setShowWhisperModal(true);
+                        fetchWhisperData();
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg flex items-center gap-1 transition-all"
+                    >
+                      <span>Open Whisper AI</span>
+                    </button>
+                    <button
+                      onClick={handleQuickWhisperSuggest}
+                      disabled={loadingWhisperSuggest}
+                      className="px-3 py-1 text-[11px] font-bold bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-lg flex items-center gap-1 shadow-md shadow-teal-500/20 transition-all disabled:opacity-50"
+                      title="Fetch live discussion notes and generate suggested timeline update"
+                    >
+                      {loadingWhisperSuggest ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3 text-yellow-300" />
+                      )}
+                      <span>Suggest Update</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Post Timeline Update
@@ -2308,6 +2614,509 @@ export default function IncidentDetailsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Whisper AI Teams Meeting Intelligence Modal ── */}
+      {showWhisperModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="relative bg-slate-950 border border-teal-500/40 rounded-3xl shadow-2xl shadow-teal-500/10 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center shadow-lg shadow-teal-500/10">
+                  <Mic className="w-5 h-5 text-teal-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-extrabold text-white tracking-wide">Whisper AI</h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-teal-500/20 to-emerald-500/20 text-teal-300 border border-teal-500/30 font-mono">
+                      TEAMS FACILITATOR CONNECTED
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-sans">
+                    Real-time Teams meeting notes, AI update synthesis & transcription storage for <strong className="text-white">{incident.number}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {incident.teamsBridgeLink && (
+                  <a
+                    href={incident.teamsBridgeLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-teal-950 text-teal-300 hover:bg-teal-900 border border-teal-700/50 rounded-xl transition-all"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Join Bridge</span>
+                  </a>
+                )}
+                <button
+                  onClick={() => setShowWhisperModal(false)}
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex items-center border-b border-slate-800 bg-slate-950 px-6 shrink-0 gap-6 text-xs">
+              <button
+                onClick={() => setWhisperTab('live')}
+                className={`py-3.5 font-bold flex items-center gap-2 border-b-2 transition-all ${
+                  whisperTab === 'live'
+                    ? 'border-teal-400 text-teal-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>Live Discussion & Notes</span>
+                {whisperData?.liveDiscussionLines?.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-teal-500/20 text-teal-300 font-mono text-[10px]">
+                    {whisperData.liveDiscussionLines.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setWhisperTab('transcription')}
+                className={`py-3.5 font-bold flex items-center gap-2 border-b-2 transition-all ${
+                  whisperTab === 'transcription'
+                    ? 'border-teal-400 text-teal-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Transcription Storage</span>
+              </button>
+
+              <button
+                onClick={() => setWhisperTab('archive')}
+                className={`py-3.5 font-bold flex items-center gap-2 border-b-2 transition-all ${
+                  whisperTab === 'archive'
+                    ? 'border-teal-400 text-teal-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>Saved Transcripts Archive</span>
+                {whisperData?.savedTranscripts?.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-mono text-[10px]">
+                    {whisperData.savedTranscripts.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Modal Body / Tab Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+              {/* ── TAB 1: Live Discussion & Notes ── */}
+              {whisperTab === 'live' && (
+                <div className="space-y-6">
+
+                  {/* Facilitator Webhook Info Strip */}
+                  <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <p className="font-bold text-slate-200 flex items-center gap-1.5">
+                        <span>Teams Facilitator Ingestion Webhook</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-mono">ONLINE</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        Stream live notes from Teams facilitator app into this incident
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleCopyWebhookUrl}
+                      className="px-3 py-1.5 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+                    >
+                      {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedWebhook ? 'Copied URL!' : 'Copy Webhook URL'}</span>
+                    </button>
+                  </div>
+
+                  {/* Discussion Notes Feed & Controls */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <Radio className="w-3.5 h-3.5 text-teal-400 animate-pulse" />
+                        <span>Real-Time Teams Meeting Discussion Notes</span>
+                      </h3>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={fetchWhisperData}
+                          disabled={loadingWhisper}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg flex items-center gap-1 transition-all"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${loadingWhisper ? 'animate-spin text-teal-400' : ''}`} />
+                          <span>Sync from Teams</span>
+                        </button>
+                        <button
+                          onClick={() => setIsEditingNotes(!isEditingNotes)}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg flex items-center gap-1 transition-all"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>{isEditingNotes ? 'View Stream' : 'Edit / Paste Notes'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {isEditingNotes ? (
+                      <div className="space-y-2">
+                        <textarea
+                          rows={6}
+                          placeholder="Paste or write meeting notes from Teams facilitator app..."
+                          value={manualNotesInput}
+                          onChange={(e) => setManualNotesInput(e.target.value)}
+                          className="w-full bg-slate-950 border border-teal-500/40 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono leading-relaxed"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setIsEditingNotes(false)}
+                            className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveManualNotes}
+                            disabled={savingNotes}
+                            className="px-4 py-1.5 text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {savingNotes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            <span>Save Notes</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl max-h-56 overflow-y-auto space-y-2">
+                        {whisperData?.liveDiscussionLines && whisperData.liveDiscussionLines.length > 0 ? (
+                          whisperData.liveDiscussionLines.map((line: string, idx: number) => (
+                            <div key={idx} className="text-xs text-slate-300 flex items-start gap-2 py-1 border-b border-slate-900 last:border-none font-mono">
+                              <span className="text-[10px] text-teal-400 shrink-0 font-bold">#{idx + 1}</span>
+                              <span className="leading-relaxed">{line}</span>
+                            </div>
+                          ))
+                        ) : manualNotesInput ? (
+                          <div className="text-xs text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                            {manualNotesInput}
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center text-xs text-slate-500 space-y-2">
+                            <Mic className="w-6 h-6 text-slate-600 mx-auto" />
+                            <p>No real-time notes captured yet for this Teams bridge.</p>
+                            <p className="text-[10px] text-slate-600">
+                              Start speaking on the bridge with Teams Facilitator active, or click &quot;Edit / Paste Notes&quot; to provide discussion notes manually.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Suggest Latest Update Action */}
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-800/80">
+                    <p className="text-[11px] text-slate-400">
+                      Use Gemini AI to analyze the live notes and extract an executive ITSM incident update.
+                    </p>
+                    <button
+                      onClick={handleGenerateWhisperSuggest}
+                      disabled={loadingWhisperSuggest}
+                      className="px-4 py-2 text-xs font-bold bg-gradient-to-r from-teal-600 via-cyan-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
+                    >
+                      {loadingWhisperSuggest ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4 text-yellow-300" />
+                      )}
+                      <span>{loadingWhisperSuggest ? 'Synthesizing...' : 'Suggest Latest Update Summary'}</span>
+                    </button>
+                  </div>
+
+                  {/* ── AI Suggested Update Card ── */}
+                  {whisperSuggestion && (
+                    <div className="p-5 bg-gradient-to-br from-slate-900 via-teal-950/20 to-slate-900 border border-teal-500/40 rounded-2xl shadow-xl space-y-4 animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between border-b border-teal-500/20 pb-3">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-teal-400" />
+                          <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
+                            Suggested Incident Timeline Update
+                          </h4>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                            {whisperSuggestion.focusArea || 'Bridge Synthesis'}
+                          </span>
+                        </div>
+
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {whisperSuggestion.lastUpdated || 'Just Now'}
+                        </span>
+                      </div>
+
+                      {/* Main Suggested Summary */}
+                      <div className="p-3.5 bg-slate-950/70 border border-teal-500/30 rounded-xl space-y-1">
+                        <p className="text-xs font-bold text-teal-300 uppercase text-[9px]">Timeline Update Draft</p>
+                        <p className="text-xs text-white leading-relaxed font-sans font-medium">
+                          {whisperSuggestion.suggestedSummary}
+                        </p>
+                      </div>
+
+                      {/* Key Highlights & Action Items */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        {whisperSuggestion.keyHighlights?.length > 0 && (
+                          <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl space-y-1.5">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Key Technical Observations</p>
+                            <ul className="space-y-1">
+                              {whisperSuggestion.keyHighlights.map((h: string, i: number) => (
+                                <li key={i} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                                  <span className="text-teal-400 shrink-0 font-bold">•</span>
+                                  <span>{h}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {whisperSuggestion.actionItems?.length > 0 && (
+                          <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl space-y-1.5">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Assigned Action Items</p>
+                            <ul className="space-y-1">
+                              {whisperSuggestion.actionItems.map((a: string, i: number) => (
+                                <li key={i} className="text-[11px] text-slate-300 flex items-start gap-1.5">
+                                  <span className="text-amber-400 shrink-0 font-bold">✓</span>
+                                  <span>{a}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions for Suggested Update */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          Status consensus: <strong className="text-teal-300">{whisperSuggestion.bridgeStatus || 'ACTIVE_TRIAGE'}</strong>
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setWhisperTab('transcription');
+                              if (whisperSuggestion.suggestedSummary) {
+                                setTranscriptTitleInput(`Bridge Session - ${incident.number}`);
+                              }
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Save Full Transcription</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleInsertWhisperSummary(whisperSuggestion.suggestedSummary)}
+                            className="px-4 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Insert into Timeline Update</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── TAB 2: Full Transcription Storage ── */}
+              {whisperTab === 'transcription' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Store Complete Incident Meeting Transcription
+                      </h3>
+                      <p className="text-[10px] text-slate-400">
+                        Archive the verbatim audio/video dialogue from Microsoft Teams for compliance, audit &amp; RCA.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleCopyTranscript(fullTranscriptInput)}
+                        disabled={!fullTranscriptInput.trim()}
+                        className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {copiedTranscript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedTranscript ? 'Copied' : 'Copy'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDownloadTranscript(fullTranscriptInput)}
+                        disabled={!fullTranscriptInput.trim()}
+                        className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download .txt</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Meeting Session Title
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={`e.g. Teams Command Bridge Session 1 - ${incident.number}`}
+                      value={transcriptTitleInput}
+                      onChange={(e) => setTranscriptTitleInput(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase">
+                        Full Transcription Text
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {fullTranscriptInput.trim() ? `${fullTranscriptInput.trim().split(/\s+/).length} words` : '0 words'}
+                      </span>
+                    </div>
+                    <textarea
+                      rows={12}
+                      placeholder="Full meeting transcription dialogue will appear here once fetched, or paste verbatim transcript..."
+                      value={fullTranscriptInput}
+                      onChange={(e) => setFullTranscriptInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-teal-500/60 font-mono leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-3 border-t border-slate-800">
+                    <button
+                      onClick={handleSaveFullTranscription}
+                      disabled={savingTranscript || !fullTranscriptInput.trim()}
+                      className="px-5 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
+                    >
+                      {savingTranscript ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      <span>{savingTranscript ? 'Archiving...' : 'Save Full Transcription to Records'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TAB 3: Saved Transcripts Archive ── */}
+              {whisperTab === 'archive' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Archived Meeting Transcripts ({whisperData?.savedTranscripts?.length || 0})
+                      </h3>
+                      <p className="text-[10px] text-slate-400">
+                        Historical audio bridge records and facilitator transcripts preserved for {incident.number}.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={fetchWhisperData}
+                      className="px-3 py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Refresh Archive</span>
+                    </button>
+                  </div>
+
+                  {whisperData?.savedTranscripts && whisperData.savedTranscripts.length > 0 ? (
+                    <div className="space-y-3">
+                      {whisperData.savedTranscripts.map((t: any) => (
+                        <div
+                          key={t.id}
+                          className="p-4 bg-slate-900/80 border border-slate-800 hover:border-teal-500/30 rounded-2xl space-y-3 transition-colors text-xs"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-teal-400" />
+                              <span className="font-bold text-white text-xs">{t.title || 'Teams Bridge Session'}</span>
+                              <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-800 text-slate-300">
+                                {t.source || 'TEAMS_FACILITATOR'}
+                              </span>
+                            </div>
+
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {new Date(t.createdAt).toLocaleString([], {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                              })}
+                            </span>
+                          </div>
+
+                          {t.summary && (
+                            <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1">
+                              <p className="text-[9px] font-bold text-teal-400 uppercase">AI Meeting Summary</p>
+                              <p className="text-xs text-slate-200 leading-relaxed font-sans">{t.summary}</p>
+                            </div>
+                          )}
+
+                          <div className="p-3 bg-slate-950 border border-slate-900 rounded-xl max-h-36 overflow-y-auto font-mono text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap">
+                            {t.transcriptText}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[10px] text-slate-500">
+                              Captured by: {t.capturedBy || 'Whisper AI'}
+                            </span>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleCopyTranscript(t.transcriptText)}
+                                className="px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </button>
+                              <button
+                                onClick={() => handleDownloadTranscript(t.transcriptText, t.title)}
+                                className="px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Export</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl space-y-2">
+                      <History className="w-6 h-6 text-slate-600 mx-auto" />
+                      <p>No saved transcripts in the archive yet.</p>
+                      <p className="text-[10px] text-slate-600">
+                        Go to the &quot;Full Transcription Storage&quot; tab to save your first meeting record.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between text-xs shrink-0">
+              <span className="text-[10px] text-slate-400 font-mono">
+                Whisper AI v1.0 • Teams Facilitator Protocol • Gemini AI
+              </span>
+              <button
+                onClick={() => setShowWhisperModal(false)}
+                className="px-4 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}
