@@ -486,8 +486,7 @@ export async function fetchTeamsMeetingTranscriptDetails(
       };
     }
 
-    // Meeting found, now query its transcripts
-    // Meeting found, query its transcripts with retry across Microsoft Graph edge nodes during tenant policy propagation
+    // Query transcripts with retry across Microsoft Graph edge nodes during tenant policy propagation
     let transRes: any = null;
     let transData: any = null;
     let lastTransErr: any = null;
@@ -556,8 +555,10 @@ export async function fetchTeamsMeetingTranscriptDetails(
       };
     }
 
-    const transData = await transRes.json();
-    const transcriptList = transData.value || [];
+    if (!transData) {
+      transData = await transRes.json().catch(() => ({ value: [] }));
+    }
+    const transcriptList = transData?.value || [];
     if (transcriptList.length === 0) {
       return {
         lines: [],
