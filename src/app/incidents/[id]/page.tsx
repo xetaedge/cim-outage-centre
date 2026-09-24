@@ -557,7 +557,10 @@ export default function IncidentDetailsPage() {
     if (!incident) return;
     setLoadingWhisper(true);
     try {
-      const res = await fetch(`/api/incidents/${incident.id}/whisper`);
+      const res = await fetch(`/api/incidents/${incident.id}/whisper?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      });
       const data = await res.json();
       if (data.success) {
         setWhisperData(data);

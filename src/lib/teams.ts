@@ -464,7 +464,10 @@ export async function fetchTeamsMeetingTranscriptDetails(
     for (const filterStr of filterVariants) {
       const meetingsRes = await fetch(
         `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings?$filter=${encodeURIComponent(filterStr)}`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        {
+          cache: 'no-store',
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        }
       );
 
       if (meetingsRes.ok) {
@@ -494,7 +497,10 @@ export async function fetchTeamsMeetingTranscriptDetails(
     for (let attempt = 0; attempt < 5; attempt++) {
       transRes = await fetch(
         `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        {
+          cache: 'no-store',
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        }
       );
 
       if (transRes.ok) {
@@ -558,8 +564,8 @@ export async function fetchTeamsMeetingTranscriptDetails(
     if (!transData) {
       transData = await transRes.json().catch(() => ({ value: [] }));
     }
-    const transcriptList = transData?.value || [];
-    if (transcriptList.length === 0) {
+    const rawTranscriptList = transData?.value || [];
+    if (rawTranscriptList.length === 0) {
       return {
         lines: [],
         meetingId: meeting.id,
@@ -570,11 +576,19 @@ export async function fetchTeamsMeetingTranscriptDetails(
       };
     }
 
-    // Retrieve content of transcripts (fetch across available sessions with retry for edge-propagation)
+    // Sort transcripts chronologically (oldest first, so conversation flows in sequence)
+    const sortedTranscripts = [...rawTranscriptList].sort((a: any, b: any) => {
+      const timeA = a.createdDateTime ? new Date(a.createdDateTime).getTime() : 0;
+      const timeB = b.createdDateTime ? new Date(b.createdDateTime).getTime() : 0;
+      return timeA - timeB;
+    });
+
+    // Retrieve content across all available sessions with deduplication
     const allParsedLines: string[] = [];
+    const seenSentences = new Set<string>();
     let lastError = '';
 
-    for (const tItem of transcriptList) {
+    for (const tItem of sortedTranscripts) {
       const tid = tItem.id;
       if (!tid) continue;
 
@@ -583,6 +597,7 @@ export async function fetchTeamsMeetingTranscriptDetails(
         contentRes = await fetch(
           `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts/${tid}/content?$format=text/vtt`,
           {
+            cache: 'no-store',
             headers: {
               'Authorization': `Bearer ${accessToken}`,
               'Accept': 'text/vtt',
@@ -608,17 +623,27 @@ export async function fetchTeamsMeetingTranscriptDetails(
           }
           // Parse <v Speaker Name>Speech</v>
           const speakerMatch = line.match(/<v\s+([^>]+)>(.*?)<\/v>/i);
+          let formattedLine = '';
+          let textForDedupe = '';
+
           if (speakerMatch) {
             const speaker = speakerMatch[1].trim();
             const speech = speakerMatch[2].replace(/<[^>]+>/g, '').trim();
             if (speech) {
-              allParsedLines.push(`[${speaker}]: ${speech}`);
+              formattedLine = `[${speaker}]: ${speech}`;
+              textForDedupe = speech.toLowerCase();
             }
           } else {
             const clean = line.replace(/<[^>]+>/g, '').trim();
             if (clean.length > 2) {
-              allParsedLines.push(clean);
+              formattedLine = clean;
+              textForDedupe = clean.toLowerCase();
             }
+          }
+
+          if (formattedLine && textForDedupe && !seenSentences.has(textForDedupe)) {
+            seenSentences.add(textForDedupe);
+            allParsedLines.push(formattedLine);
           }
         }
       } else if (contentRes) {
@@ -631,17 +656,17 @@ export async function fetchTeamsMeetingTranscriptDetails(
         lines: [],
         meetingId: meeting.id,
         hasMeeting: true,
-        transcriptsFound: transcriptList.length,
+        transcriptsFound: rawTranscriptList.length,
         errorCode: 'ContentFetchFailed',
-        error: `Found ${transcriptList.length} transcript sessions but content synchronization is in progress (${lastError}).`
+        error: `Found ${rawTranscriptList.length} transcript sessions but content synchronization is in progress (${lastError}).`
       };
     }
 
     return {
-      lines: allParsedLines.slice(-60),
+      lines: allParsedLines.slice(-100),
       meetingId: meeting.id,
       hasMeeting: true,
-      transcriptsFound: transcriptList.length
+      transcriptsFound: rawTranscriptList.length
     };
   } catch (err: any) {
     console.error('Error fetching Graph API transcripts:', err.message);

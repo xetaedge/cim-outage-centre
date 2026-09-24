@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { fetchTeamsMeetingTranscriptDetails } from '@/lib/teams';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET(
   request: Request,
@@ -56,7 +58,22 @@ export async function GET(
     }
 
     // 2. Parse facilitator notes if available
-    const facilitatorNotes = incident.whisperLatestNotes || '';
+    let facilitatorNotes = incident.whisperLatestNotes || '';
+
+    // If new transcript lines were fetched from Graph API, persist to incident record
+    if (liveGraphTranscript.length > 0) {
+      const freshJoined = liveGraphTranscript.join('\n');
+      if (freshJoined !== incident.whisperLatestNotes) {
+        facilitatorNotes = freshJoined;
+        await prisma.incident.update({
+          where: { id: incident.id },
+          data: {
+            whisperLatestNotes: freshJoined,
+            whisperLastSyncedAt: new Date(),
+          },
+        }).catch(() => {});
+      }
+    }
 
     // 3. Construct current live discussion lines
     const activeDiscussionLines: string[] = [];
