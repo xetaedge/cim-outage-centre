@@ -371,81 +371,245 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
   }
 }
 
+export interface TeamsTranscriptFetchResult {
+  lines: string[];
+  meetingId?: string;
+  hasMeeting: boolean;
+  transcriptsFound: number;
+  error?: string;
+  errorCode?: 'GraphAccessToTranscriptsDisabled' | 'MeetingNotFound' | 'NoTranscriptsYet' | 'AuthError' | string;
+  adminActionRequired?: boolean;
+  instructions?: string[];
+}
+
+/**
+ * Detailed fetch of Teams meeting transcripts with complete diagnostic reporting.
+ */
+export async function fetchTeamsMeetingTranscriptDetails(
+  incidentNumber: string,
+  joinUrl?: string | null
+): Promise<TeamsTranscriptFetchResult> {
+  if (!joinUrl) {
+    return {
+      lines: [],
+      hasMeeting: false,
+      transcriptsFound: 0,
+      errorCode: 'NoJoinUrl',
+      error: 'No Teams bridge URL provided for this incident.'
+    };
+  }
+
+  try {
+    const creds = await getTeamsCredentials();
+    if (!creds.clientSecret || !creds.tenantId || creds.tenantId === 'common') {
+      return {
+        lines: [],
+        hasMeeting: false,
+        transcriptsFound: 0,
+        errorCode: 'AuthError',
+        error: 'Microsoft Teams / Azure AD application credentials not configured.'
+      };
+    }
+
+    const tokenRes = await fetch(`https://login.microsoftonline.com/${creds.tenantId}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: creds.clientId,
+        scope: 'https://graph.microsoft.com/.default',
+        client_secret: creds.clientSecret,
+        grant_type: 'client_credentials'
+      })
+    });
+
+    if (!tokenRes.ok) {
+      const err = await tokenRes.text().catch(() => '');
+      return {
+        lines: [],
+        hasMeeting: false,
+        transcriptsFound: 0,
+        errorCode: 'AuthError',
+        error: `Azure AD OAuth authentication failed: ${err.slice(0, 150)}`
+      };
+    }
+
+    const tokenData = await tokenRes.json();
+    const accessToken = tokenData.access_token;
+    if (!accessToken) {
+      return {
+        lines: [],
+        hasMeeting: false,
+        transcriptsFound: 0,
+        errorCode: 'AuthError',
+        error: 'Failed to retrieve Azure AD access token.'
+      };
+    }
+
+    // Extract organizer Object ID (GUID) from JoinWebUrl context, default to known tenant organizer
+    let userId = '2bcd9518-c8af-45b1-9bcc-c5214293672e';
+    try {
+      const match = joinUrl.match(/"Oid"\s*:\s*"([^"]+)"/i) || joinUrl.match(/Oid%22%3a%22([^%]+)%22/i);
+      if (match && match[1]) {
+        userId = match[1];
+      }
+    } catch (e) {}
+
+    // Lookup online meeting by joinWebUrl
+    let meeting: any = null;
+    const filterVariants = [
+      `joinWebUrl eq '${joinUrl}'`,
+      `joinWebUrl eq '${decodeURIComponent(joinUrl)}'`,
+    ];
+
+    for (const filterStr of filterVariants) {
+      const meetingsRes = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings?$filter=${encodeURIComponent(filterStr)}`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (meetingsRes.ok) {
+        const meetingsData = await meetingsRes.json();
+        if (meetingsData.value && meetingsData.value.length > 0) {
+          meeting = meetingsData.value[0];
+          break;
+        }
+      }
+    }
+
+    if (!meeting || !meeting.id) {
+      return {
+        lines: [],
+        hasMeeting: false,
+        transcriptsFound: 0,
+        errorCode: 'MeetingNotFound',
+        error: 'Teams meeting not found for this bridge URL in the organizer calendar.'
+      };
+    }
+
+    // Meeting found, now query its transcripts
+    const transRes = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!transRes.ok) {
+      const errData = await transRes.json().catch(() => ({}));
+      const innerCode = errData?.error?.innerError?.code || errData?.innerError?.code || '';
+      const errMsg = errData?.error?.message || errData?.message || '';
+
+      if (
+        transRes.status === 403 &&
+        (innerCode === 'GraphAccessToTranscriptsDisabled' || errMsg.includes('transcripts is disabled'))
+      ) {
+        return {
+          lines: [],
+          meetingId: meeting.id,
+          hasMeeting: true,
+          transcriptsFound: 0,
+          errorCode: 'GraphAccessToTranscriptsDisabled',
+          error: 'Graph API access to transcripts is disabled for this tenant.',
+          adminActionRequired: true,
+          instructions: [
+            'Sign in to the Microsoft Teams Admin Center (https://admin.teams.microsoft.com/)',
+            'Go to Meetings > Meeting settings',
+            'Scroll down to the "Transcript API access" section',
+            'Toggle "Microsoft Graph access" to On',
+            'Toggle "Include speaker attribution" to On, then click Save',
+            'PowerShell Alternative: Set-CsTeamsMeetingConfiguration -EnableGraphTranscriptAccess $true -EnableAttributedTranscripts $true -Identity Global'
+          ]
+        };
+      }
+
+      return {
+        lines: [],
+        meetingId: meeting.id,
+        hasMeeting: true,
+        transcriptsFound: 0,
+        errorCode: `HttpError_${transRes.status}`,
+        error: errMsg || `Failed to fetch meeting transcripts (HTTP ${transRes.status})`
+      };
+    }
+
+    const transData = await transRes.json();
+    const transcriptList = transData.value || [];
+    if (transcriptList.length === 0) {
+      return {
+        lines: [],
+        meetingId: meeting.id,
+        hasMeeting: true,
+        transcriptsFound: 0,
+        errorCode: 'NoTranscriptsYet',
+        error: 'No transcripts found for this meeting yet. Verify transcription was started in Teams.'
+      };
+    }
+
+    // Retrieve content of the latest transcript
+    const latestTranscript = transcriptList[transcriptList.length - 1];
+    const contentRes = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts/${latestTranscript.id}/content?$format=text/vtt`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!contentRes.ok) {
+      return {
+        lines: [],
+        meetingId: meeting.id,
+        hasMeeting: true,
+        transcriptsFound: transcriptList.length,
+        errorCode: 'ContentFetchFailed',
+        error: `Transcript exists but failed to download content (HTTP ${contentRes.status})`
+      };
+    }
+
+    const vttText = await contentRes.text();
+    const rawLines = vttText.split(/\r?\n/);
+    const parsedLines: string[] = [];
+
+    for (const rawLine of rawLines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('WEBVTT') || line.includes('-->') || /^\d+$/.test(line)) {
+        continue;
+      }
+      // Parse <v Speaker Name>Speech</v>
+      const speakerMatch = line.match(/<v\s+([^>]+)>(.*?)<\/v>/i);
+      if (speakerMatch) {
+        const speaker = speakerMatch[1].trim();
+        const speech = speakerMatch[2].replace(/<[^>]+>/g, '').trim();
+        if (speech) {
+          parsedLines.push(`[${speaker}]: ${speech}`);
+        }
+      } else {
+        const clean = line.replace(/<[^>]+>/g, '').trim();
+        if (clean.length > 2) {
+          parsedLines.push(clean);
+        }
+      }
+    }
+
+    return {
+      lines: parsedLines.slice(-50),
+      meetingId: meeting.id,
+      hasMeeting: true,
+      transcriptsFound: transcriptList.length
+    };
+  } catch (err: any) {
+    console.error('Error fetching Graph API transcripts:', err.message);
+    return {
+      lines: [],
+      hasMeeting: false,
+      transcriptsFound: 0,
+      errorCode: 'UnexpectedError',
+      error: err.message
+    };
+  }
+}
+
 /**
  * Fetches live transcription notes from Microsoft Graph API for the corresponding Teams meeting.
  * Returns only real transcription data from Microsoft Graph API without any dummy or simulated fallbacks.
  */
 export async function fetchTeamsMeetingTranscript(incidentNumber: string, joinUrl?: string | null): Promise<string[]> {
-  if (!joinUrl) return [];
-  
-  try {
-    const creds = await getTeamsCredentials();
-    if (creds.clientSecret && creds.tenantId && creds.tenantId !== 'common') {
-      const tokenRes = await fetch(`https://login.microsoftonline.com/${creds.tenantId}/oauth2/v2.0/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: creds.clientId,
-          scope: 'https://graph.microsoft.com/.default',
-          client_secret: creds.clientSecret,
-          grant_type: 'client_credentials'
-        })
-      });
-
-      if (tokenRes.ok) {
-        const tokenData = await tokenRes.json();
-        const accessToken = tokenData.access_token;
-        if (accessToken) {
-          // Extract organizer Object ID (GUID) from JoinWebUrl context, default to known OID
-          let userId = '2bcd9518-c8af-45b1-9bcc-c5214293672e';
-          try {
-            const match = joinUrl.match(/"Oid"\s*:\s*"([^"]+)"/i) || joinUrl.match(/Oid%22%3a%22([^%]+)%22/i);
-            if (match && match[1]) {
-              userId = match[1];
-            }
-          } catch (e) {}
-
-          // Look for online meeting by JoinWebUrl using user GUID (Graph API rejects email addresses for this endpoint in app-only mode)
-          const filterUrl = encodeURIComponent(`JoinWebUrl eq '${joinUrl}'`);
-          const meetingsRes = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings?$filter=${filterUrl}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
-          
-          if (meetingsRes.ok) {
-            const meetingsData = await meetingsRes.json();
-            const meeting = meetingsData.value?.[0];
-            if (meeting?.id) {
-              const transRes = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts`, {
-                headers: { 'Authorization': `Bearer ${accessToken}` }
-              });
-              if (transRes.ok) {
-                const transData = await transRes.json();
-                const transcriptId = transData.value?.[0]?.id;
-                if (transcriptId) {
-                  const contentRes = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings/${meeting.id}/transcripts/${transcriptId}/content?$format=text/vtt`, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                  });
-                  if (contentRes.ok) {
-                    const vttText = await contentRes.text();
-                    const lines = vttText.split('\n').filter(l => l && !l.includes('-->') && !l.startsWith('WEBVTT') && l.trim().length > 3);
-                    if (lines.length > 0) {
-                      return lines.slice(-25); // Return latest 25 real transcript lines
-                    }
-                  }
-                }
-              }
-            }
-          } else {
-            const errData = await meetingsRes.json().catch(() => ({}));
-            console.warn(`[Graph API Live Transcription] Query returned status ${meetingsRes.status}:`, errData?.error?.message || 'Check Application Access Policy in Teams PowerShell.');
-          }
-        }
-      }
-    }
-  } catch (err: any) {
-    console.error('Error fetching Graph API transcripts:', err.message);
-  }
-
-  // Return empty array when no real transcripts are found; never return dummy or simulated data.
-  return [];
+  const result = await fetchTeamsMeetingTranscriptDetails(incidentNumber, joinUrl);
+  return result.lines;
 }
+

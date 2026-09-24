@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { fetchTeamsMeetingTranscript } from '@/lib/teams';
+import { fetchTeamsMeetingTranscriptDetails } from '@/lib/teams';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,13 +28,30 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Incident not found' }, { status: 404 });
     }
 
-    // 1. Fetch live transcript lines from Microsoft Graph API if meeting link exists
+    // 1. Fetch live transcript lines and diagnostic info from Microsoft Graph API
     let liveGraphTranscript: string[] = [];
+    let graphStatus: any = null;
+
     if (incident.teamsBridgeLink) {
       try {
-        liveGraphTranscript = await fetchTeamsMeetingTranscript(incident.number, incident.teamsBridgeLink);
+        const details = await fetchTeamsMeetingTranscriptDetails(incident.number, incident.teamsBridgeLink);
+        liveGraphTranscript = details.lines || [];
+        graphStatus = {
+          hasMeeting: details.hasMeeting,
+          meetingId: details.meetingId || null,
+          transcriptsFound: details.transcriptsFound,
+          errorCode: details.errorCode || null,
+          error: details.error || null,
+          adminActionRequired: Boolean(details.adminActionRequired),
+          instructions: details.instructions || [],
+        };
       } catch (graphErr: any) {
         console.warn('[Whisper AI] Graph API fetch notice:', graphErr.message);
+        graphStatus = {
+          hasMeeting: false,
+          errorCode: 'FetchException',
+          error: graphErr.message,
+        };
       }
     }
 
@@ -62,6 +79,7 @@ export async function GET(
       lastSyncedAt: incident.whisperLastSyncedAt || null,
       savedTranscripts: incident.transcripts || [],
       webhookUrl: `/api/incidents/${incident.id}/whisper/ingest`,
+      graphStatus,
     });
   } catch (err: any) {
     console.error('[Whisper AI] Error fetching meeting status:', err);
