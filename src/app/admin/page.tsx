@@ -46,7 +46,7 @@ export default function AdminSettingsPage() {
   const [teamsWebhook, setTeamsWebhook] = useState('https://outlook.office.com/webhook/cim-incidents');
 
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'ai' | 'microsoft' | 'servicenow' | 'users' | 'groups' | 'notifications' | 'all'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'microsoft' | 'servicenow' | 'users' | 'groups' | 'notifications' | 'bulk' | 'all'>('ai');
 
   // Microsoft Teams Plug & Play API Configuration State
   const [teamsAppName, setTeamsAppName] = useState('Graph Java quick start');

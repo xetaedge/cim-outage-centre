@@ -81,6 +81,7 @@ export default function IncidentDetailsPage() {
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [loadingEmailPreview, setLoadingEmailPreview] = useState(false);
+  const [dispatchingBridgeInvite, setDispatchingBridgeInvite] = useState(false);
 
   // AI Solutions & Related Change Requests state
   const [solutions, setSolutions] = useState<any>(null);
@@ -549,6 +550,33 @@ export default function IncidentDetailsPage() {
       });
     } finally {
       setLoadingEmailPreview(false);
+    }
+  };
+
+  const handleDispatchBridgeInvite = async () => {
+    if (!incident?.id) return;
+    setDispatchingBridgeInvite(true);
+    try {
+      const res = await fetch(`/api/incidents/${incident.id}/bridge/invite`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({
+          title: '📅 Teams Bridge Meeting Dispatched',
+          message: `Meeting invite sent to ${data.totalAttendees} recipients (Bridge Recipients, ${incident.assignmentGroup || 'Assignment Group'}, Affected Sites).`,
+          type: 'p1',
+        });
+        if (data.meetingUrl && data.meetingUrl !== incident.teamsBridgeLink) {
+          setIncident((prev: any) => prev ? { ...prev, teamsBridgeLink: data.meetingUrl } : null);
+        }
+      } else {
+        alert(data.error || 'Failed to dispatch Teams bridge meeting');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Network error dispatching bridge invite');
+    } finally {
+      setDispatchingBridgeInvite(false);
     }
   };
 
@@ -1580,6 +1608,37 @@ export default function IncidentDetailsPage() {
                   <Play className="w-4 h-4 fill-white" />
                   <span>Join Teams Command Bridge</span>
                 </a>
+
+                {['ADMIN', 'INCIDENT_MANAGER', 'INCIDENT_COMMANDER', 'MANAGER'].includes(currentRole) && (
+                  <button
+                    onClick={handleDispatchBridgeInvite}
+                    disabled={dispatchingBridgeInvite}
+                    className="w-full py-2 bg-slate-800/90 hover:bg-slate-700/90 text-purple-300 hover:text-white text-xs font-semibold rounded-xl border border-purple-500/30 flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
+                    title="Sends Microsoft Teams calendar meeting invite and priority bridge email to Bridge Recipients + Assignment Group + Affected Sites"
+                  >
+                    {dispatchingBridgeInvite ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Dispatching Invite...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Dispatch Bridge Invite</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-800/80 flex items-center justify-between px-1">
+                  <span className="text-slate-400">Invite Distribution:</span>
+                  <span
+                    className="text-purple-300 font-semibold cursor-help"
+                    title="Teams meeting calendar invite & priority bridge email are sent to: Bridge Recipients (System Settings) + Assignment Group Email + Affected Site Contacts"
+                  >
+                    Bridge + Group + Sites
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-xl text-center space-y-2">

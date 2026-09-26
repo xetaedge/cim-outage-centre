@@ -158,7 +158,15 @@ export async function POST(request: Request) {
           aiCurrentStatusSummary: aiInsights.currentStatusSummary || issueSummary || shortDescription,
         },
         include: {
-          sites: { include: { site: true } },
+          sites: {
+            include: {
+              site: {
+                include: {
+                  supportPersons: true,
+                },
+              },
+            },
+          },
           updates: true,
         },
       });
@@ -175,6 +183,24 @@ export async function POST(request: Request) {
             siteId,
           })),
         });
+
+        // Refresh incident with updated site relations
+        const refreshed = await prisma.incident.findUnique({
+          where: { id: existing.id },
+          include: {
+            sites: {
+              include: {
+                site: {
+                  include: {
+                    supportPersons: true,
+                  },
+                },
+              },
+            },
+            updates: true,
+          },
+        });
+        if (refreshed) incident = refreshed;
       }
     } else {
       // Create new incident
@@ -206,7 +232,15 @@ export async function POST(request: Request) {
           },
         },
         include: {
-          sites: { include: { site: true } },
+          sites: {
+            include: {
+              site: {
+                include: {
+                  supportPersons: true,
+                },
+              },
+            },
+          },
           updates: true,
         },
       });

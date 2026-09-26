@@ -176,3 +176,111 @@ export async function sendEmail(
     return { success: false, message: msg, error: error?.message || String(error) };
   }
 }
+
+export interface BridgeRecipientsResolution {
+  allEmails: string[];
+  bridgeRecipients: string[];
+  assignmentGroupEmail: string;
+  siteEmails: string[];
+  organizerEmail: string;
+}
+
+/**
+ * Resolves all recipient email addresses for a Teams Command Bridge meeting:
+ * 1. Bridge Recipients (from SystemSetting 'BRIDGE_RECIPIENTS')
+ * 2. Assignment Group Email (from AssignmentGroup table)
+ * 3. Sites Affected Emails (from Site.supportEmails & SiteSupportPerson.email)
+ * 4. Organizer / Admin Email (from GRAPH_SENDER_EMAIL or fallback)
+ */
+export async function resolveBridgeRecipients(incident: any): Promise<BridgeRecipientsResolution> {
+  // 1. Setting: BRIDGE_RECIPIENTS
+  const rawBridgeSetting = await getSetting('BRIDGE_RECIPIENTS', '');
+  const bridgeRecipients = rawBridgeSetting
+    .split(/[,;\n]+/)
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0 && e.includes('@'));
+
+  // 2. Assignment Group Email
+  let assignmentGroupEmail = '';
+  if (incident?.assignmentGroup) {
+    assignmentGroupEmail = await getAssignmentGroupEmail(incident.assignmentGroup);
+  }
+
+  // 3. Sites Affected Emails
+  let siteEmailsList: string[] = [];
+  let sites = incident?.sites;
+
+  // If incident has an ID but sites aren't fully populated with supportPersons, fetch them
+  if (incident?.id && (!sites || sites.length === 0 || !sites[0]?.site?.supportPersons)) {
+    try {
+      const freshSites = await prisma.incidentSite.findMany({
+        where: { incidentId: incident.id },
+        include: {
+          site: {
+            include: {
+              supportPersons: true,
+            },
+          },
+        },
+      });
+      if (freshSites && freshSites.length > 0) {
+        sites = freshSites;
+      }
+    } catch (e) {
+      console.warn('[resolveBridgeRecipients] Failed to fetch fresh sites with supportPersons:', e);
+    }
+  }
+
+  // If incident only has affectedSiteIds array (e.g. before incidentSite creation)
+  if ((!sites || sites.length === 0) && Array.isArray(incident?.affectedSiteIds) && incident.affectedSiteIds.length > 0) {
+    try {
+      const siteRecords = await prisma.site.findMany({
+        where: { id: { in: incident.affectedSiteIds } },
+        include: { supportPersons: true },
+      });
+      sites = siteRecords.map((site) => ({ site }));
+    } catch (e) {
+      console.warn('[resolveBridgeRecipients] Failed to fetch sites from affectedSiteIds:', e);
+    }
+  }
+
+  if (sites && Array.isArray(sites)) {
+    const rawSiteEmails = getSiteEmails(sites);
+    siteEmailsList = rawSiteEmails
+      .split(/[,;\n]+/)
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0 && e.includes('@'));
+  }
+
+  // 4. Organizer / Admin Email
+  const { senderEmail } = await getEmailConfig();
+  const organizerEmail = senderEmail || 'shivam@xetainteractives.com';
+
+  // 5. Combine and deduplicate
+  const combined = [
+    organizerEmail,
+    ...bridgeRecipients,
+    assignmentGroupEmail,
+    ...siteEmailsList,
+  ]
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0 && e.includes('@'));
+
+  const seen = new Set<string>();
+  const allEmails: string[] = [];
+  for (const email of combined) {
+    const lower = email.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      allEmails.push(email);
+    }
+  }
+
+  return {
+    allEmails,
+    bridgeRecipients,
+    assignmentGroupEmail,
+    siteEmails: siteEmailsList,
+    organizerEmail,
+  };
+}

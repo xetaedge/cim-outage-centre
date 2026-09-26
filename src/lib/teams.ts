@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import nodemailer from 'nodemailer';
 import { getMicrosoftCredentials, MicrosoftCredentials } from './microsoft';
+import { resolveBridgeRecipients } from './email';
 
 export type TeamsCredentials = MicrosoftCredentials;
 
@@ -145,9 +146,14 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
     const startTime = now.toISOString();
     const endTime = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
 
-    console.log(`[Instant Meeting Dispatched] To: shivam@xetainteractives.com | Title: "${meetingTitle}" | Duration: 30 mins`);
+    // Resolve all bridge recipients: Bridge Recipients + Assignment Group Email + Sites Affected Emails + Organizer
+    const recipientsData = await resolveBridgeRecipients(incident);
+    const { allEmails, bridgeRecipients, assignmentGroupEmail, siteEmails, organizerEmail } = recipientsData;
+    const recipientListStr = allEmails.join(', ');
 
-    // 1. Send real email invite to shivam@xetainteractives.com via nodemailer (Ethereal test account or SMTP)
+    console.log(`[Instant Meeting Dispatched] Incident: ${cleanNum} | Total Attendees: ${allEmails.length} (${recipientListStr}) | Title: "${meetingTitle}" | Duration: 30 mins`);
+
+    // 1. Send real email invite via nodemailer (Ethereal test account or SMTP)
     try {
       const testAccount = await nodemailer.createTestAccount().catch(() => null);
       const transporter = testAccount
@@ -164,12 +170,17 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
 
       const info = await transporter.sendMail({
         from: '"CIM Command Bridge AI" <commandbridge@xetainteractives.com>',
-        to: 'shivam@xetainteractives.com',
+        to: recipientListStr,
         subject: meetingTitle,
-        text: `Instant 30-Minute Command Bridge Meeting\n\nBridge Details: ${bridgeLink}\nIncident: ${cleanNum}\nPriority: ${incident.priority || 'P1'}\nLocations: ${locationsStr}\nAI Summary: ${aiSummary}`,
+        text: `Instant 30-Minute Command Bridge Meeting\n\nBridge Details: ${bridgeLink}\nIncident: ${cleanNum}\nPriority: ${incident.priority || 'P1'}\nLocations: ${locationsStr}\nAI Summary: ${aiSummary}\nAttendees: ${recipientListStr}`,
         html: `<div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px; max-width: 600px;">
           <h2 style="color: #7030A0; margin-top: 0;">📅 Instant 30-Minute Command Bridge Meeting</h2>
-          <p><strong>Required Attendee:</strong> shivam@xetainteractives.com</p>
+          <p><strong>Required Attendees (${allEmails.length}):</strong> ${recipientListStr}</p>
+          <div style="background: #eef2ff; border-left: 4px solid #6366f1; padding: 10px 14px; margin: 12px 0; font-size: 13px;">
+            <p style="margin: 2px 0;"><strong>Bridge Recipients:</strong> ${bridgeRecipients.join(', ') || 'None'}</p>
+            <p style="margin: 2px 0;"><strong>Assignment Group:</strong> ${assignmentGroupEmail || 'N/A'}</p>
+            <p style="margin: 2px 0;"><strong>Affected Site Contacts:</strong> ${siteEmails.join(', ') || 'Global'}</p>
+          </div>
           <p>A new outage incident has been ingested into the Command Center. An instant 30-minute bridge meeting has been automatically created.</p>
           <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #7030A0; margin: 15px 0;">
             <p style="margin: 0 0 10px 0;"><strong>🔗 Bridge Details:</strong></p>
@@ -184,10 +195,10 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
       }).catch((e: any) => console.log('Mail send info:', e.message));
 
       if (info && nodemailer.getTestMessageUrl(info)) {
-        console.log(`[📧 Email Delivered to shivam@xetainteractives.com] Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+        console.log(`[📧 Email Delivered to ${allEmails.length} recipients] Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
       }
     } catch (emailErr: any) {
-      console.log(`[📧 Email Invite Processed for shivam@xetainteractives.com]`);
+      console.log(`[📧 Email Invite Processed for ${allEmails.length} recipients]`);
     }
 
     // 2. Attempt Microsoft Graph API online meeting & calendar invite creation if OAuth credentials exist
@@ -212,7 +223,7 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
 
             // Step A: Attempt direct Online Meeting creation via Graph API
             try {
-              const meetingRes = await fetch(`https://graph.microsoft.com/v1.0/users/shivam@xetainteractives.com/onlineMeetings`, {
+              const meetingRes = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}/onlineMeetings`, {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${tokenData.access_token}`,
@@ -238,9 +249,17 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
               console.error('Online meeting direct creation error:', meetErr.message);
             }
 
-            // Step B: Attempt Calendar Event creation with online meeting provider
+            // Step B: Attempt Calendar Event creation with online meeting provider & ALL attendees
             try {
-              const eventRes = await fetch(`https://graph.microsoft.com/v1.0/users/shivam@xetainteractives.com/calendar/events`, {
+              const graphAttendees = allEmails.map((email) => ({
+                emailAddress: {
+                  address: email,
+                  name: email.split('@')[0],
+                },
+                type: 'required' as const,
+              }));
+
+              const eventRes = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}/calendar/events`, {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${tokenData.access_token}`,
@@ -250,17 +269,12 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
                   subject: meetingTitle,
                   body: {
                     contentType: 'HTML',
-                    content: `<p>An instant 30-minute Command Bridge meeting has been initiated for a newly ingested outage record.</p><p><strong>Bridge Details:</strong> <a href="${liveJoinUrl || bridgeLink}">${liveJoinUrl || bridgeLink}</a></p><p><strong>Incident:</strong> ${cleanNum} (${incident.priority || 'P1'})</p><p><strong>Locations:</strong> ${locationsStr}</p><p><strong>AI Summary:</strong> ${aiSummary}</p>`
+                    content: `<p>An instant 30-minute Command Bridge meeting has been initiated for outage incident ${cleanNum}.</p><p><strong>Bridge Details:</strong> <a href="${liveJoinUrl || bridgeLink}">${liveJoinUrl || bridgeLink}</a></p><p><strong>Incident:</strong> ${cleanNum} (${incident.priority || 'P1'})</p><p><strong>Locations:</strong> ${locationsStr}</p><p><strong>AI Summary:</strong> ${aiSummary}</p><p><strong>Distribution:</strong> Bridge Recipients, ${incident.assignmentGroup || 'Assignment Group'}, Affected Site Contacts</p>`
                   },
                   start: { dateTime: startTime, timeZone: 'UTC' },
                   end: { dateTime: endTime, timeZone: 'UTC' },
                   location: { displayName: 'Microsoft Teams Command Bridge' },
-                  attendees: [
-                    {
-                      emailAddress: { address: 'shivam@xetainteractives.com', name: 'Shivam' },
-                      type: 'required'
-                    }
-                  ],
+                  attendees: graphAttendees,
                   isOnlineMeeting: true,
                   onlineMeetingProvider: 'teamsForBusiness'
                 })
@@ -273,7 +287,7 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
                   
                   if (liveJoinUrl) {
                     const finalTitle = `Microsoft Teams Command Bridge || ${cleanNum} || ${incident.priority || 'P1'} || ${locationsStr} || ${aiSummary}`;
-                    await fetch(`https://graph.microsoft.com/v1.0/users/shivam@xetainteractives.com/calendar/events/${eventData.id}`, {
+                    await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}/calendar/events/${eventData.id}`, {
                       method: 'PATCH',
                       headers: {
                         'Authorization': `Bearer ${tokenData.access_token}`,
@@ -283,14 +297,14 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
                         subject: finalTitle,
                         body: {
                           contentType: 'HTML',
-                          content: `<p>An instant 30-minute Command Bridge meeting has been initiated for a newly ingested outage record.</p><p><strong>Bridge Details:</strong> <a href="${liveJoinUrl}">${liveJoinUrl}</a></p><p><strong>Incident:</strong> ${cleanNum} (${incident.priority || 'P1'})</p><p><strong>Locations:</strong> ${locationsStr}</p><p><strong>AI Summary:</strong> ${aiSummary}</p>`
+                          content: `<p>An instant 30-minute Command Bridge meeting has been initiated for outage incident ${cleanNum}.</p><p><strong>Bridge Details:</strong> <a href="${liveJoinUrl}">${liveJoinUrl}</a></p><p><strong>Incident:</strong> ${cleanNum} (${incident.priority || 'P1'})</p><p><strong>Locations:</strong> ${locationsStr}</p><p><strong>AI Summary:</strong> ${aiSummary}</p><p><strong>Distribution:</strong> Bridge Recipients, ${incident.assignmentGroup || 'Assignment Group'}, Affected Site Contacts</p>`
                         }
                       })
                     }).catch(e => console.error('Failed to patch calendar event subject with liveJoinUrl:', e.message));
                     console.log(`[✅ Updated Calendar Event Title with Live URL] "${finalTitle}"`);
                   }
                 }
-                console.log(`[📅 Microsoft Graph Calendar Invite Sent] To: shivam@xetainteractives.com | Event ID: ${eventData.id}`);
+                console.log(`[📅 Microsoft Graph Calendar Invite Sent] To: ${allEmails.length} attendees (${recipientListStr}) | Event ID: ${eventData.id}`);
               } else {
                 const errText = await eventRes.text();
                 console.log(`[Calendar Event API non-200] ${eventRes.status}: ${errText}`);
@@ -318,7 +332,7 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
       console.log(`[ℹ️ Microsoft Graph OAuth Skipped] To create live server-side online meetings (/meetup-join/... URLs), please enter TEAMS_CLIENT_SECRET and TEAMS_TENANT_ID in Admin Settings.`);
     }
 
-    // 3. Deliver instant meeting card to Microsoft Teams channel addressing shivam@xetainteractives.com
+    // 3. Deliver instant meeting card to Microsoft Teams channel
     if (creds.webhookUrl) {
       const inviteCardPayload = {
         "@type": "MessageCard",
@@ -328,12 +342,12 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
         "sections": [
           {
             "activityTitle": `📅 **INSTANT MEETING INVITE: 30 Minutes (Same Time)**`,
-            "activitySubtitle": `Required Attendee: **shivam@xetainteractives.com** | Status: **NEW INCIDENT FETCHED**`,
+            "activitySubtitle": `Attendees: **${allEmails.length} recipients** (Bridge Recipients + Assignment Group + Site Contacts) | Status: **COMMAND BRIDGE DISPATCHED**`,
             "activityImage": "https://img.icons8.com/color/96/microsoft-teams.png",
-            "text": `A new incident not previously in the portal has been fetched. An instant 30-minute Command Bridge meeting has been scheduled and dispatched to **shivam@xetainteractives.com**.`,
+            "text": `An instant 30-minute Command Bridge meeting has been scheduled and dispatched to **${allEmails.length} recipients** across Bridge Recipients, ${incident.assignmentGroup || 'Assignment Group'}, and impacted site contacts.`,
             "facts": [
               { "name": "Meeting Title:", "value": `\`${meetingTitle}\`` },
-              { "name": "Recipient:", "value": "shivam@xetainteractives.com" },
+              { "name": "Recipients:", "value": `${allEmails.length} total (${recipientListStr.slice(0, 150)}${recipientListStr.length > 150 ? '...' : ''})` },
               { "name": "Duration:", "value": "30 Minutes (Instant Start)" },
               { "name": "Start Time:", "value": new Date(startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
               { "name": "End Time:", "value": new Date(endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
@@ -351,8 +365,8 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
           },
           {
             "@type": "OpenUri",
-            "name": "📧 Email shivam@xetainteractives.com",
-            "targets": [{ "os": "default", "uri": `mailto:shivam@xetainteractives.com?subject=${encodeURIComponent(meetingTitle)}&body=${encodeURIComponent(`Join live bridge: ${bridgeLink}\n\nIncident: ${cleanNum}\nPriority: ${incident.priority || 'P1'}\nLocations: ${locationsStr}\nSummary: ${aiSummary}`)}` }]
+            "name": "📧 Email All Attendees",
+            "targets": [{ "os": "default", "uri": `mailto:${encodeURIComponent(recipientListStr)}?subject=${encodeURIComponent(meetingTitle)}&body=${encodeURIComponent(`Join live bridge: ${bridgeLink}\n\nIncident: ${cleanNum}\nPriority: ${incident.priority || 'P1'}\nLocations: ${locationsStr}\nSummary: ${aiSummary}`)}` }]
           }
         ]
       };
@@ -364,7 +378,15 @@ export async function sendInstantMeetingInvite(incident: any, isNew: boolean = t
       }).catch(whErr => console.error('Teams webhook meeting card delivery error:', whErr));
     }
 
-    return { success: true, recipient: 'shivam@xetainteractives.com', meetingTitle, startTime, endTime, bridgeLink };
+    return {
+      success: true,
+      recipients: recipientsData,
+      totalAttendees: allEmails.length,
+      meetingTitle,
+      startTime,
+      endTime,
+      bridgeLink: incident.teamsBridgeLink || bridgeLink,
+    };
   } catch (err: any) {
     console.error('Failed to send instant meeting invite:', err);
     return { success: false, error: err.message };
