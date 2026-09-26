@@ -144,6 +144,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const result = await sendEmail('CIM_UPDATE_RECIPIENTS', subject, html, extraEmails);
 
+    // Persist user-edited Business Impact and Total Outage Duration to the incident record
+    if (outageDuration || businessImpact) {
+      await prisma.incident.updateMany({
+        where: { OR: [{ id: params.id }, { number: incidentNumber }] },
+        data: {
+          ...(outageDuration ? { totalOutageDuration: outageDuration } : {}),
+          ...(businessImpact ? { aiBusinessImpact: businessImpact } : {}),
+        },
+      }).catch((e) => console.warn('Could not update incident metadata during email send:', e.message));
+    }
+
     return NextResponse.json(result);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

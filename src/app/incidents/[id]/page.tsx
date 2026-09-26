@@ -516,6 +516,14 @@ export default function IncidentDetailsPage() {
       });
       const data = await res.json();
       if (data.success) {
+        if (emailPreviewPayload.businessImpact || emailPreviewPayload.outageDuration) {
+          setIncident((prev: any) => prev ? ({
+            ...prev,
+            ...(emailPreviewPayload.businessImpact ? { aiBusinessImpact: emailPreviewPayload.businessImpact } : {}),
+            ...(emailPreviewPayload.outageDuration ? { totalOutageDuration: emailPreviewPayload.outageDuration } : {}),
+          }) : prev);
+        }
+
         addToast({
           title: '✅ CIM Notification Sent',
           message: `Email delivered to ${data.recipientCount ?? 'configured'} recipients.`,
@@ -2553,10 +2561,10 @@ export default function IncidentDetailsPage() {
                 </div>
               </div>
 
-              {/* AI-Rephrased Fields Banner */}
+              {/* AI-Rephrased & Editable Fields Banner */}
               <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-xs text-yellow-300">
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span>Fields marked <span className="font-bold text-yellow-200">⭐ AI-Rephrased</span> were synthesised from your raw update. Review and edit before sending.</span>
+                <span>Fields marked <span className="font-bold text-yellow-200">⭐ AI-Rephrased</span> or <span className="font-bold text-blue-300">✏️ Editable</span> (Business Impact, Outage Duration, Summaries) can be edited before sending.</span>
               </div>
 
               {/* Email Fields Table */}
@@ -2583,18 +2591,49 @@ export default function IncidentDetailsPage() {
                   <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Next Update</div>
                   <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.nextUpdate}</div>
                 </div>
-                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
-                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Business Impact</div>
-                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.businessImpact}</div>
+                {/* ✏️ Business Impact - Editable */}
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800 bg-slate-900/40">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>Business Impact</span>
+                    <span className="text-[10px] text-blue-400 font-mono font-normal">✏️ Editable</span>
+                  </div>
+                  <div className="col-span-2 p-1.5 bg-slate-950">
+                    <textarea
+                      rows={2}
+                      value={emailPreviewPayload.businessImpact || ''}
+                      onChange={(e) =>
+                        setEmailPreviewPayload((p: any) => ({ ...p, businessImpact: e.target.value }))
+                      }
+                      placeholder="e.g. Critical operations affected across site..."
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none font-sans leading-relaxed"
+                    />
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
                   <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Sites Impacted</div>
                   <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.sitesImpacted}</div>
                 </div>
-                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
-                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Outage Duration</div>
-                  <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.outageDuration}</div>
+
+                {/* ✏️ Total Outage Duration - Editable */}
+                <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800 bg-slate-900/40">
+                  <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>Total Outage Duration</span>
+                    <span className="text-[10px] text-blue-400 font-mono font-normal">✏️ Editable</span>
+                  </div>
+                  <div className="col-span-2 p-1.5 bg-slate-950">
+                    <input
+                      type="text"
+                      value={emailPreviewPayload.outageDuration || ''}
+                      onChange={(e) =>
+                        setEmailPreviewPayload((p: any) => ({ ...p, outageDuration: e.target.value }))
+                      }
+                      placeholder="e.g. 2h 15m or N/A"
+                      className="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+                    />
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800">
                   <div className="bg-slate-800/60 px-3 py-2 font-semibold text-slate-300">Assignment Group</div>
                   <div className="px-3 py-2 text-slate-200 col-span-2">{emailPreviewPayload.assignmentGroup}</div>
@@ -2669,7 +2708,7 @@ export default function IncidentDetailsPage() {
 
             {/* Modal Footer Actions */}
             <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
-              <p className="text-[10px] text-slate-500">Changes made above are applied to the email only and do not modify the incident record.</p>
+              <p className="text-[10px] text-slate-500">Changes made above are delivered in the CIM notification email and saved to the incident record.</p>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => { setShowEmailPreview(false); setEmailPreviewPayload(null); }}
