@@ -131,7 +131,22 @@ export async function POST(request: Request, { params }: { params: { id: string 
       });
     }
 
-    // Audit Log
+    // Audit Log - safely resolve userId to prevent foreign key violations with stale session tokens
+    let validUserId: string | null = null;
+    if (session?.id) {
+      try {
+        const userRecord = await prisma.user.findUnique({
+          where: { id: session.id },
+          select: { id: true },
+        });
+        if (userRecord) {
+          validUserId = userRecord.id;
+        }
+      } catch {
+        validUserId = null;
+      }
+    }
+
     const auditDetails = [
       `Posted Update #${nextUpdateNumber} on ${incident.number}.`,
       `Next update due at ${nextDueTimestamp.toLocaleTimeString()}.`,
@@ -139,15 +154,19 @@ export async function POST(request: Request, { params }: { params: { id: string 
       additionalInfo ? 'Additional RCA context provided.' : '',
     ].filter(Boolean).join(' ');
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session?.id || null,
-        userName: effectiveAuthorName,
-        userRole: session?.role || 'INCIDENT_MANAGER',
-        action: 'UPDATE_POSTED',
-        details: auditDetails,
-      },
-    });
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: validUserId,
+          userName: effectiveAuthorName,
+          userRole: session?.role || 'INCIDENT_MANAGER',
+          action: 'UPDATE_POSTED',
+          details: auditDetails,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('Non-fatal: Failed to record audit log for update:', auditErr);
+    }
 
     // Build CIM Email Preview payload only if "Update Additional Info" is NOT selected
     // (Per user requirement: when selecting "Update Additional Info", it should NOT trigger an email)
@@ -204,19 +223,23 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     // Sync worknotes to ServiceNow only if user opted in (publishToWorknotes flag)
+    let worknotesSynced = false;
+    let worknotesError: string | null = null;
+
     if (publishToWorknotes) {
       try {
         const workNote = `[CIM Outage Centre - Update #${nextUpdateNumber}] by ${effectiveAuthorName}:\n${comment}`;
         // First, look up the incident sys_id by number
+        const cleanNumber = incident.number.trim();
         const lookupRes = await fetchServiceNowAPI(
-          `/api/now/table/incident?sysparm_query=number=${encodeURIComponent(incident.number)}&sysparm_fields=sys_id&sysparm_limit=1`,
+          `/api/now/table/incident?sysparm_query=number=${encodeURIComponent(cleanNumber)}&sysparm_fields=sys_id,number&sysparm_limit=1`,
           { method: 'GET' }
         );
         if (lookupRes.ok) {
           const lookupData = await lookupRes.json();
           const sysId = lookupData.result?.[0]?.sys_id;
           if (sysId) {
-            await fetchServiceNowAPI(
+            const patchRes = await fetchServiceNowAPI(
               `/api/now/table/incident/${sysId}`,
               {
                 method: 'PATCH',
@@ -224,12 +247,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
                 body: JSON.stringify({ work_notes: workNote }),
               }
             );
-            console.log(`[ServiceNow] Worknotes synced for ${incident.number} (sys_id: ${sysId})`);
+            if (patchRes.ok) {
+              worknotesSynced = true;
+              console.log(`[ServiceNow] Worknotes synced successfully for ${incident.number} (sys_id: ${sysId})`);
+            } else {
+              const errBody = await patchRes.text().catch(() => '');
+              worknotesError = `ServiceNow PATCH failed (${patchRes.status}): ${errBody}`;
+              console.error(`[ServiceNow] ${worknotesError}`);
+            }
           } else {
-            console.warn(`[ServiceNow] Incident ${incident.number} not found in ServiceNow — worknotes not synced.`);
+            worknotesError = `Incident ${incident.number} not found in ServiceNow`;
+            console.warn(`[ServiceNow] ${worknotesError}`);
           }
+        } else {
+          worknotesError = `ServiceNow incident lookup failed (${lookupRes.status})`;
+          console.error(`[ServiceNow] ${worknotesError}`);
         }
-      } catch (snErr) {
+      } catch (snErr: any) {
+        worknotesError = snErr?.message || 'Exception during ServiceNow worknotes sync';
         console.error('[ServiceNow] Failed to sync worknotes:', snErr);
       }
     } else {
@@ -247,9 +282,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
       },
       emailPreview,
       emailSuppressed: isAdditionalInfoSelected,
-      worknotesSynced: publishToWorknotes,
+      worknotesSynced,
+      worknotesError,
     });
   } catch (err: any) {
+    console.error('Error posting update:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

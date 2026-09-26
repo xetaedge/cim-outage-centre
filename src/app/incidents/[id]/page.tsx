@@ -451,7 +451,7 @@ export default function IncidentDetailsPage() {
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setUpdateComment('');
         if (showAdditionalInfo) {
           setAdditionalInfo('');
@@ -463,15 +463,20 @@ export default function IncidentDetailsPage() {
 
         // If Additional Info was selected, do NOT trigger email per requirement
         if (isAdditionalInfoSelected || data.emailSuppressed) {
+          const snMsg = data.worknotesSynced ? ' • ServiceNow worknotes synced' : '';
           addToast({
-            title: `📝 Update #${data.update.updateNumber} Published`,
-            message: `Update recorded with internal additional info (email notification suppressed).`,
+            title: `📝 Update #${data.update?.updateNumber || ''} Published`,
+            message: `Update recorded with internal additional info (email notification suppressed)${snMsg}.`,
             type: 'update',
           });
         } else {
+          const worknoteMsg = data.worknotesSynced
+            ? ' • ServiceNow worknotes synced'
+            : (publishToWorknotes && data.worknotesError ? ` • ServiceNow note: ${data.worknotesError}` : '');
+
           addToast({
-            title: `📝 Update #${data.update.updateNumber} Published`,
-            message: `Generative AI synthesized new executive summary. Review the CIM Notification email below.`,
+            title: `📝 Update #${data.update?.updateNumber || ''} Published`,
+            message: `Generative AI synthesized new executive summary. Review the CIM Notification email below.${worknoteMsg}`,
             type: 'update',
           });
 
@@ -481,9 +486,20 @@ export default function IncidentDetailsPage() {
             setShowEmailPreview(true);
           }
         }
+      } else {
+        addToast({
+          title: '❌ Failed to Publish Update',
+          message: data.error || data.message || `Server returned status ${res.status}. Could not publish update.`,
+          type: 'update',
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to post update:', err);
+      addToast({
+        title: '❌ Network Error',
+        message: err?.message || 'Could not reach the server to publish the update.',
+        type: 'update',
+      });
     } finally {
       setSubmittingUpdate(false);
     }
