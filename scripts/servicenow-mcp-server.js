@@ -15,33 +15,132 @@
  * 8. servicenow_test_connection
  */
 
+const fs = require('fs');
+const path = require('path');
 const readline = require('readline');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
 
-// Server configuration from environment or defaults
+// Helper to safely load environment files without third-party dependencies
+function loadEnvFile(relPath) {
+  try {
+    const fullPath = path.resolve(process.cwd(), relPath);
+    if (!fs.existsSync(fullPath)) return;
+    const content = fs.readFileSync(fullPath, 'utf8');
+    content.split('\n').forEach((line) => {
+      line = line.trim();
+      if (!line || line.startsWith('#')) return;
+      const eqIdx = line.indexOf('=');
+      if (eqIdx !== -1) {
+        const k = line.slice(0, eqIdx).trim();
+        let v = line.slice(eqIdx + 1).trim();
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1);
+        }
+        if (!process.env[k]) {
+          process.env[k] = v;
+        }
+      }
+    });
+  } catch (e) {}
+}
+
+loadEnvFile('.env.local');
+loadEnvFile('.env');
+
+let prismaClient = null;
+let cachedConfig = null;
+let lastFetchTime = 0;
+const CACHE_TTL_MS = 10000; // 10 seconds cache to be responsive to Admin UI changes
+
+/**
+ * Centrally resolves ServiceNow credentials from SystemSetting table (as saved in Admin UI),
+ * with fallbacks to environment variables and default developer instance.
+ */
+async function getServiceNowConfig(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedConfig && (now - lastFetchTime < CACHE_TTL_MS)) {
+    return cachedConfig;
+  }
+
+  let dbUrl = null;
+  let dbUser = null;
+  let dbPass = null;
+
+  try {
+    if (!prismaClient) {
+      const { PrismaClient } = require('@prisma/client');
+      prismaClient = new PrismaClient();
+    }
+    const settings = await prismaClient.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            'SERVICENOW_INSTANCE_URL', 'servicenow_url',
+            'SERVICENOW_USERNAME', 'servicenow_user',
+            'SERVICENOW_PASSWORD', 'servicenow_password'
+          ]
+        }
+      }
+    });
+
+    for (const s of settings) {
+      if (s.key === 'SERVICENOW_INSTANCE_URL' || s.key === 'servicenow_url') dbUrl = s.value;
+      if (s.key === 'SERVICENOW_USERNAME' || s.key === 'servicenow_user') dbUser = s.value;
+      if (s.key === 'SERVICENOW_PASSWORD' || s.key === 'servicenow_password') dbPass = s.value;
+    }
+  } catch (err) {
+    // Database query failed or Prisma not configured, fallback to environment
+  }
+
+  const instanceUrl = (
+    dbUrl ||
+    process.env.SERVICENOW_INSTANCE_URL ||
+    'https://dev403781.service-now.com'
+  ).replace(/\/$/, '');
+
+  const username = dbUser || process.env.SERVICENOW_USERNAME || 'admin';
+  const password = dbPass || process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=';
+
+  cachedConfig = {
+    instanceUrl,
+    username,
+    password,
+  };
+  lastFetchTime = now;
+  return cachedConfig;
+}
+
+// Fallback synchronous config snapshot for compatibility
 const CONFIG = {
-  instanceUrl: (process.env.SERVICENOW_INSTANCE_URL || 'https://dev403781.service-now.com').replace(/\/$/, ''),
-  username: process.env.SERVICENOW_USERNAME || 'admin',
-  password: process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=',
+  get instanceUrl() {
+    return cachedConfig?.instanceUrl || (process.env.SERVICENOW_INSTANCE_URL || 'https://dev403781.service-now.com').replace(/\/$/, '');
+  },
+  get username() {
+    return cachedConfig?.username || process.env.SERVICENOW_USERNAME || 'admin';
+  },
+  get password() {
+    return cachedConfig?.password || process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=';
+  },
 };
 
 /**
  * Universal ServiceNow REST API fetch helper
  */
-function fetchServiceNow(endpointPath, options = {}) {
+async function fetchServiceNow(endpointPath, options = {}) {
+  const config = await getServiceNowConfig();
   return new Promise((resolve, reject) => {
     try {
       const fullUrlStr = endpointPath.startsWith('http')
         ? endpointPath
-        : `${CONFIG.instanceUrl}${endpointPath.startsWith('/') ? '' : '/'}${endpointPath}`;
+        : `${config.instanceUrl}${endpointPath.startsWith('/') ? '' : '/'}${endpointPath}`;
 
       const targetUrl = new URL(fullUrlStr);
       const isHttps = targetUrl.protocol === 'https:';
       const lib = isHttps ? https : http;
 
-      const auth = Buffer.from(`${CONFIG.username}:${CONFIG.password}`).toString('base64');
+      const auth = Buffer.from(`${config.username}:${config.password}`).toString('base64');
 
       const headers = {
         'Authorization': `Basic ${auth}`,
@@ -340,6 +439,8 @@ const TOOLS = [
  * Tool Execution Handlers
  */
 async function executeTool(name, args = {}) {
+  const config = await getServiceNowConfig();
+
   switch (name) {
     case 'servicenow_get_incident': {
       const incNum = String(args.incident_number || '').trim().toUpperCase();
@@ -355,7 +456,7 @@ async function executeTool(name, args = {}) {
           content: [
             {
               type: 'text',
-              text: `❌ Incident "${incNum}" not found in ServiceNow instance (${CONFIG.instanceUrl}).`,
+              text: `❌ Incident "${incNum}" not found in ServiceNow instance (${config.instanceUrl}).`,
             },
           ],
           isError: true,
@@ -424,7 +525,7 @@ async function executeTool(name, args = {}) {
 
       const lines = [
         `### 📋 ServiceNow Incidents (${results.length} found)`,
-        `*Instance: ${CONFIG.instanceUrl} | Query: ${fullQuery}*\n`,
+        `*Instance: ${config.instanceUrl} | Query: ${fullQuery}*\n`,
       ];
 
       results.forEach((inc, idx) => {
@@ -649,7 +750,7 @@ async function executeTool(name, args = {}) {
           content: [
             {
               type: 'text',
-              text: `✅ **ServiceNow MCP Server Connected Successfully!**\n\n- **Instance URL**: \`${CONFIG.instanceUrl}\`\n- **Authenticated User**: \`${CONFIG.username}\`\n- **Latency**: \`${latencyMs}ms\`\n- **Status**: Live & Ready for Incident, Change, and KB Automation`,
+              text: `✅ **ServiceNow MCP Server Connected Successfully!**\n\n- **Instance URL**: \`${config.instanceUrl}\`\n- **Authenticated User**: \`${config.username}\`\n- **Latency**: \`${latencyMs}ms\`\n- **Status**: Live & Ready for Incident, Change, and KB Automation`,
             },
           ],
         };
@@ -658,7 +759,7 @@ async function executeTool(name, args = {}) {
           content: [
             {
               type: 'text',
-              text: `❌ **ServiceNow Connection Failed**\n\n- **Instance URL**: \`${CONFIG.instanceUrl}\`\n- **Status Code**: \`${res.status}\`\n- **Error**: ${res.error}`,
+              text: `❌ **ServiceNow Connection Failed**\n\n- **Instance URL**: \`${config.instanceUrl}\`\n- **Status Code**: \`${res.status}\`\n- **Error**: ${res.error}`,
             },
           ],
           isError: true,
@@ -771,5 +872,6 @@ module.exports = {
   TOOLS,
   executeTool,
   fetchServiceNow,
+  getServiceNowConfig,
   CONFIG,
 };
