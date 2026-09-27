@@ -78,8 +78,10 @@ export async function PUT(request: Request) {
     });
 
     const updatedSession: UserSession = {
-      ...session,
+      id: session.id,
       name: updatedUser?.name || session.name,
+      email: session.email,
+      role: session.role,
       timeZone: effectiveTz,
     };
 

@@ -13,7 +13,16 @@ export interface UserSession {
 }
 
 export function signToken(user: UserSession): string {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
+  // Strip out JWT internal claims (exp, iat, nbf) if user object was derived from an existing decoded token
+  const { id, name, email, role, timeZone } = user as any;
+  const cleanPayload: UserSession = {
+    id,
+    name,
+    email,
+    role,
+    ...(timeZone ? { timeZone } : {}),
+  };
+  return jwt.sign(cleanPayload, JWT_SECRET, { expiresIn: '7d' });
 }
 
 export function verifyToken(token: string): UserSession | null {
