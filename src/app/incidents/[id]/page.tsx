@@ -2206,11 +2206,11 @@ export default function IncidentDetailsPage() {
                   {/* Divider */}
                   <div className="border-t border-slate-800" />
 
-                  {/* 3. Recent ServiceNow Changes (Last 10 Days) */}
+                  {/* 3. Recent ServiceNow Changes (Last 30 Days) */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <GitPullRequest className="w-4 h-4 text-cyan-400" />
-                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">3. Correlated Changes (Last 10 Days)</h3>
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">3. Correlated Changes (Last 30 Days)</h3>
                       <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
                         {aiAnalysis.recentChanges?.length || 0} Found
                       </span>
@@ -2221,26 +2221,36 @@ export default function IncidentDetailsPage() {
                         {aiAnalysis.recentChanges.map((chg: any, idx: number) => (
                           <div key={idx} className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl hover:border-cyan-500/40 transition-colors space-y-2">
                             <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-xs font-bold text-cyan-300 font-mono">{chg.changeNumber}</span>
                                 <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${
                                   chg.risk === 'High' ? 'bg-red-500/20 text-red-400 border-red-500/40' :
                                   chg.risk === 'Moderate' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' :
                                   'bg-slate-700 text-slate-400 border-slate-600'
                                 }`}>{chg.risk || 'Normal'}</span>
+                                {chg.category && chg.category !== 'General' && (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-medium bg-slate-800 text-slate-300 rounded border border-slate-700">
+                                    {chg.category}
+                                  </span>
+                                )}
+                                {chg.assignmentGroup && chg.assignmentGroup !== 'Operations' && (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-medium bg-slate-800 text-cyan-300 rounded border border-slate-700">
+                                    {chg.assignmentGroup}
+                                  </span>
+                                )}
                               </div>
-                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
                                 {chg.state || 'Implemented'}
                               </span>
                             </div>
                             <p className="text-xs text-white font-semibold leading-tight">{chg.shortDescription}</p>
                             <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
                               <span>CI: <strong className="text-slate-300">{chg.ci || 'General'}</strong></span>
-                              {chg.createdDate && <span>Date: <strong className="text-slate-300">{chg.createdDate}</strong></span>}
+                              <span>Production Date: <strong className="text-slate-300">{chg.productionDate || chg.createdDate || 'Recent'}</strong></span>
                             </div>
                             {chg.correlationReason && (
                               <div className="p-2 bg-slate-950/60 rounded-lg border border-slate-800 text-[10px] text-cyan-300/90 leading-relaxed">
-                                <span className="font-bold text-cyan-400">Correlation: </span>{chg.correlationReason}
+                                <span className="font-bold text-cyan-400">Correlation (Within 30 Days): </span>{chg.correlationReason}
                               </div>
                             )}
                           </div>
@@ -2248,7 +2258,7 @@ export default function IncidentDetailsPage() {
                       </div>
                     ) : (
                       <div className="p-4 text-center text-xs text-slate-500 border border-slate-800 rounded-xl bg-slate-900/50">
-                        No recent change requests correlated with this incident CI or description.
+                        No recent change requests correlated with this incident within the last 30-day production window.
                       </div>
                     )}
                   </div>
@@ -2300,11 +2310,11 @@ export default function IncidentDetailsPage() {
                   {/* Divider */}
                   <div className="border-t border-slate-800" />
 
-                  {/* 5. Previous Related Incidents (ServiceNow & Portal) */}
+                  {/* 5. Previous Related Incidents (ServiceNow & CIM APEX Center) */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <History className="w-4 h-4 text-blue-400" />
-                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">5. Previous Related Incidents</h3>
+                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">5. Previous Related Incidents & Resolution Notes</h3>
                       <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full">
                         {aiAnalysis.relatedIncidents?.length || 0} Verified
                       </span>
@@ -2313,12 +2323,13 @@ export default function IncidentDetailsPage() {
                     {aiAnalysis.relatedIncidents?.length > 0 ? (
                       <div className="space-y-2">
                         {aiAnalysis.relatedIncidents.map((inc: any, idx: number) => (
-                          <div key={idx} className="p-4 bg-slate-900 border border-slate-800 rounded-xl hover:border-blue-500/40 transition-colors space-y-2">
+                          <div key={idx} className="p-4 bg-slate-900 border border-slate-800 rounded-xl hover:border-blue-500/40 transition-colors space-y-2.5">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-blue-300 font-mono">{inc.incidentNumber}</span>
                                 <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${
                                   inc.source === 'ServiceNow' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' :
+                                  inc.source === 'CIM APEX Center' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
                                   'bg-slate-700 text-slate-300 border-slate-600'
                                 }`}>{inc.source || 'ServiceNow'}</span>
                                 <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded border ${
@@ -2334,17 +2345,19 @@ export default function IncidentDetailsPage() {
                               }`}>{inc.status}</span>
                             </div>
                             <p className="text-xs text-white font-semibold leading-tight">{inc.shortDescription}</p>
-                            <p className="text-[10px] text-slate-400">Group: <span className="text-slate-300 font-semibold">{inc.assignmentGroup}</span></p>
+                            <p className="text-[10px] text-slate-400">Assignment Group: <span className="text-slate-300 font-semibold">{inc.assignmentGroup}</span></p>
                             {inc.similarityReason && (
-                              <div className="pt-1.5 border-t border-slate-800">
+                              <div className="pt-1 border-t border-slate-800">
                                 <p className="text-[10px] text-violet-300 font-semibold mb-0.5">Why Related</p>
                                 <p className="text-[10px] text-slate-400 leading-relaxed">{inc.similarityReason}</p>
                               </div>
                             )}
                             {inc.resolutionNotes && (
-                              <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-[10px] leading-relaxed space-y-0.5">
-                                <p className="text-emerald-400 font-bold">ServiceNow Close / Resolution Notes:</p>
-                                <p className="text-slate-300">{inc.resolutionNotes}</p>
+                              <div className="p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-[10px] leading-relaxed space-y-1">
+                                <p className="text-emerald-400 font-bold flex items-center gap-1.5">
+                                  <span>{inc.source === 'CIM APEX Center' ? '🏛️ CIM APEX Center Resolution Notes:' : '🎫 ServiceNow Close / Resolution Notes:'}</span>
+                                </p>
+                                <p className="text-slate-300 whitespace-pre-wrap">{inc.resolutionNotes}</p>
                               </div>
                             )}
                           </div>
@@ -2352,7 +2365,7 @@ export default function IncidentDetailsPage() {
                       </div>
                     ) : (
                       <div className="p-4 text-center text-xs text-slate-500 border border-slate-800 rounded-xl bg-slate-900/50">
-                        No previous related incidents found in ServiceNow.
+                        No previous related incidents found in ServiceNow or CIM APEX Center.
                       </div>
                     )}
                   </div>

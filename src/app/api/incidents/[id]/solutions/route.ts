@@ -4,6 +4,22 @@ import { fetchServiceNowAPI } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
 
+function extractVal(field: any): string {
+  if (!field) return '';
+  if (typeof field === 'string') return field;
+  if (typeof field === 'object' && field.display_value) return field.display_value;
+  if (typeof field === 'object' && field.value) return field.value;
+  return String(field);
+}
+
+function parseProdDate(val: any): Date | null {
+  if (!val) return null;
+  const raw = typeof val === 'object' ? (val.value || val.display_value || '') : String(val);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
@@ -17,29 +33,42 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ success: false, error: 'Incident not found' }, { status: 404 });
     }
 
-    // Smart CTI/Tag-based keyword extraction for relevant filtering
-    const ctiParts = incident.cti ? incident.cti.split('/') : [];
-    let keyword = 'Database';
-    
-    if (ctiParts.length > 0 && ctiParts[0].trim() && ctiParts[0].trim().toLowerCase() !== 'general it incident') {
-      keyword = ctiParts[0].trim();
-    } else if (incident.cmdbCi && incident.cmdbCi !== '-') {
-      keyword = incident.cmdbCi;
-    } else {
-      // Extract first noun-like word from shortDescription
-      const words = incident.shortDescription.split(/\s+/).filter(w => w.length > 3);
-      if (words.length > 0) {
-        keyword = words[0].replace(/[^a-zA-Z]/g, '');
-      }
-    }
+    // Extract multi-dimensional attributes
+    const ctiParts = (incident.cti || '').split('/').map((s) => s.trim()).filter(Boolean);
+    const category = ctiParts[0] || '';
+    const subcategory = ctiParts[1] || '';
+    const ci = (incident.cmdbCi && incident.cmdbCi !== '-') ? incident.cmdbCi.trim() : '';
+    const group = incident.assignmentGroup || '';
+
+    // Primary keywords
+    const candidateKeywords = [
+      category,
+      subcategory,
+      ci,
+      group,
+      ...incident.shortDescription.split(/\s+/).filter((w) => w.length > 4 && !/^(issue|error|down|alert|unable|reported)$/i.test(w)),
+    ].filter(Boolean);
+
+    const primaryKeyword = candidateKeywords[0] || 'Infrastructure';
+
+    const incidentDate = incident.openedAt ? new Date(incident.openedAt) : new Date();
+    const thirtyDaysAgo = new Date(incidentDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0] + ' 00:00:00';
 
     let snKbSolutions: any[] = [];
     let snChangeRequests: any[] = [];
 
-    // 1. Fetch relevant ServiceNow KB SOP Articles using CTI / tag search
+    // 1. Fetch relevant ServiceNow KB SOP Articles
     try {
-      const kbQuery = encodeURIComponent(`123TEXTQUERY321=${keyword}^ORshort_descriptionLIKE${keyword}`);
-      const kbEndpointPath = `/api/now/table/kb_knowledge?sysparm_query=${kbQuery}&sysparm_limit=3&sysparm_display_value=true`;
+      const kbFilters: string[] = [];
+      if (category) kbFilters.push(`categoryLIKE${encodeURIComponent(category)}^ORtopicLIKE${encodeURIComponent(category)}`);
+      if (ci) kbFilters.push(`short_descriptionLIKE${encodeURIComponent(ci)}`);
+      candidateKeywords.slice(0, 3).forEach((kw) => {
+        kbFilters.push(`short_descriptionLIKE${encodeURIComponent(kw)}^ORtextLIKE${encodeURIComponent(kw)}`);
+      });
+
+      const kbQuery = `workflow_state=published^(${kbFilters.join('^OR') || 'workflow_state=published'})`;
+      const kbEndpointPath = `/api/now/table/kb_knowledge?sysparm_query=${encodeURIComponent(kbQuery)}&sysparm_limit=4&sysparm_display_value=true`;
 
       const kbRes = await fetchServiceNowAPI(kbEndpointPath, { method: 'GET' });
 
@@ -49,9 +78,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
           snKbSolutions = kbData.result.map((item: any) => ({
             id: item.sys_id || item.number,
             articleNumber: item.number || 'KB0010042',
-            title: extractVal(item.short_description) || extractVal(item.topic) || 'ServiceNow SOP Standard Operating Procedure',
+            title: extractVal(item.short_description) || extractVal(item.topic) || 'ServiceNow SOP Operating Procedure',
             content: extractVal(item.text) || extractVal(item.short_description) || 'Follow standard ServiceNow incident remediation protocol.',
-            source: 'ServiceNow Knowledge Base (Live Relevant Query)',
+            source: 'ServiceNow Knowledge Base',
           }));
         }
       }
@@ -59,107 +88,99 @@ export async function GET(request: Request, { params }: { params: { id: string }
       console.warn('ServiceNow KB live query warning:', e);
     }
 
-    // Fallback KB if live KB table returns empty results
     if (snKbSolutions.length === 0) {
       snKbSolutions = [
         {
           id: 'kb-1',
           articleNumber: 'KB0010482',
-          title: `SOP: ${incident.assignmentGroup} Emergency ${keyword} Recovery Playbook`,
-          content: `1. Verify ${keyword} network interfaces.\n2. Purge stagnant socket connections.\n3. Verify secondary backup route logs for ${keyword}.`,
-          source: 'ServiceNow Knowledge Base (Relevant CTI Rule)',
-        },
-        {
-          id: 'kb-2',
-          articleNumber: 'KB0010891',
-          title: `ServiceNow SOP: High-Availability Failover for ${incident.cmdbCi || keyword}`,
-          content: `Execute storage snapshot validation. Restart database connection pooler.`,
+          title: `SOP: ${incident.assignmentGroup} Emergency ${primaryKeyword} Recovery Playbook`,
+          content: `1. Verify ${primaryKeyword} network interfaces.\n2. Purge stagnant socket connections.\n3. Validate secondary backup route logs for ${primaryKeyword}.`,
           source: 'ServiceNow Knowledge Base',
         },
       ];
     }
 
-    // 2. Fetch ServiceNow Related Change Requests using CTI / tag search
+    // 2. Fetch ServiceNow Related Change Requests within 30-Day Production Window
     try {
-      const chgQuery = encodeURIComponent(`123TEXTQUERY321=${keyword}^ORshort_descriptionLIKE${keyword}`);
-      const chgEndpointPath = `/api/now/table/change_request?sysparm_query=${chgQuery}&sysparm_limit=3&sysparm_display_value=true`;
+      const chgFilters: string[] = [];
+      if (ci) chgFilters.push(`cmdb_ci.nameLIKE${encodeURIComponent(ci)}`);
+      if (category) chgFilters.push(`categoryLIKE${encodeURIComponent(category)}`);
+      if (group) chgFilters.push(`assignment_group.nameLIKE${encodeURIComponent(group)}`);
+      candidateKeywords.slice(0, 3).forEach((kw) => {
+        chgFilters.push(`short_descriptionLIKE${encodeURIComponent(kw)}`);
+      });
+
+      const chgQuery = `(${chgFilters.join('^OR') || 'active=true'})^work_start>=${thirtyDaysAgoStr}^ORstart_date>=${thirtyDaysAgoStr}^ORsys_created_on>=${thirtyDaysAgoStr}^ORDERBYDESCsys_created_on`;
+      const chgEndpointPath = `/api/now/table/change_request?sysparm_query=${encodeURIComponent(chgQuery)}&sysparm_limit=10&sysparm_display_value=true`;
 
       const chgRes = await fetchServiceNowAPI(chgEndpointPath, { method: 'GET' });
 
       if (chgRes.ok) {
         const chgData = await chgRes.json();
         if (chgData.result && chgData.result.length > 0) {
-          snChangeRequests = chgData.result.map((item: any) => ({
-            id: item.sys_id || item.number,
-            number: item.number || 'CHG0030012',
-            title: extractVal(item.short_description) || 'ServiceNow Emergency Change Request',
-            state: extractVal(item.state) || 'Implement',
-            type: extractVal(item.type) || 'Emergency',
-            targetCi: extractVal(item.cmdb_ci) || incident.cmdbCi || 'Infrastructure',
-            source: 'ServiceNow Change Management (Live Relevant Query)',
-          }));
+          snChangeRequests = chgData.result
+            .filter((item: any) => {
+              const pDate = parseProdDate(item.work_start) || parseProdDate(item.start_date) || parseProdDate(item.sys_created_on);
+              if (!pDate) return true;
+              const diffMs = Math.abs(incidentDate.getTime() - pDate.getTime());
+              const diffNowMs = Math.abs(Date.now() - pDate.getTime());
+              return diffMs <= 30 * 24 * 60 * 60 * 1000 || diffNowMs <= 30 * 24 * 60 * 60 * 1000;
+            })
+            .slice(0, 4)
+            .map((item: any) => ({
+              id: item.sys_id || item.number,
+              number: item.number || 'CHG0030012',
+              title: extractVal(item.short_description) || 'ServiceNow Production Change Request',
+              state: extractVal(item.state) || 'Implemented',
+              type: extractVal(item.type) || 'Emergency',
+              targetCi: extractVal(item.cmdb_ci) || incident.cmdbCi || 'Infrastructure',
+              productionDate: extractVal(item.work_start) || extractVal(item.start_date) || extractVal(item.sys_created_on) || 'Within 30 Days',
+              source: 'ServiceNow Change Management (<= 30-Day Window)',
+            }));
         }
       }
     } catch (e) {
       console.warn('ServiceNow Change Request live query warning:', e);
     }
 
-    // Fallback Change Requests if live table is empty
-    if (snChangeRequests.length === 0) {
-      snChangeRequests = [
-        {
-          id: 'chg-1',
-          number: 'CHG0030012',
-          title: `Emergency ${incident.cmdbCi || keyword} Hardware Maintenance Patch`,
-          state: 'Implement',
-          type: 'Emergency',
-          targetCi: incident.cmdbCi || keyword,
-          source: 'ServiceNow Change Management (Relevant Tag Rule)',
-        },
-        {
-          id: 'chg-2',
-          number: 'CHG0030045',
-          title: `Scheduled Upgrade for ${keyword} Controller Interface Modules`,
-          state: 'Scheduled',
-          type: 'Standard',
-          targetCi: keyword,
-          source: 'ServiceNow Change Management',
-        },
-      ];
-    }
-
-    // 3. Previous Incident Solutions in System (filtered by keyword / CTI)
+    // 3. Previous Incident Solutions in CIM APEX Center (Portal Incidents)
     const previousResolved = await prisma.incident.findMany({
       where: {
         id: { not: incident.id },
-        status: 'CLOSED',
-        OR: [
-          { cti: { contains: keyword } },
-          { shortDescription: { contains: keyword } },
-        ],
+        status: { in: ['RESOLVED', 'CLOSED'] },
       },
-      take: 2,
-      include: { updates: true },
+      include: {
+        updates: {
+          select: { comment: true, isFinal: true },
+          orderBy: { updateNumber: 'asc' },
+        },
+      },
+      take: 5,
     });
 
-    const previousIncidentSolutions = previousResolved.map((p) => ({
-      id: p.id,
-      number: p.number,
-      title: p.shortDescription,
-      resolution: p.aiCurrentStatusSummary || p.issueSummary || 'Successfully resolved by assignment group.',
-      source: 'Previous System Resolved Incident',
-    }));
+    const previousIncidentSolutions = previousResolved.map((p) => {
+      const finalUpd = p.updates.find((u) => u.isFinal || /\b(resolv|fixed|restor|closed)\b/i.test(u.comment));
+      const resText = finalUpd?.comment || p.updates[p.updates.length - 1]?.comment || p.aiCurrentStatusSummary || p.aiTechnicalSummary || 'Successfully resolved by engineering triage.';
 
-    // 4. Historical Bulk Uploaded Data Repository (filtered by keyword)
+      return {
+        id: p.id,
+        number: p.number,
+        title: p.shortDescription,
+        resolution: resText,
+        source: 'CIM APEX Center (Previous Incident)',
+      };
+    });
+
+    // 4. Historical Bulk Uploaded Data Repository in CIM APEX Center
     const historicalMatches = await prisma.historicalIncident.findMany({
       where: {
         OR: [
-          { category: { contains: keyword } },
-          { title: { contains: keyword } },
-          { rootCause: { contains: keyword } },
+          { category: { contains: category, mode: 'insensitive' } },
+          { title: { contains: primaryKeyword, mode: 'insensitive' } },
+          { rootCause: { contains: primaryKeyword, mode: 'insensitive' } },
         ],
       },
-      take: 3,
+      take: 4,
     });
 
     const historicalSolutions = historicalMatches.map((h) => ({
@@ -169,7 +190,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       category: h.category,
       rootCause: h.rootCause,
       resolution: h.resolutionNotes,
-      source: 'Historical Incident Archive (Bulk Uploaded)',
+      source: 'CIM APEX Center (Historical Archive)',
     }));
 
     return NextResponse.json({
@@ -184,12 +205,4 @@ export async function GET(request: Request, { params }: { params: { id: string }
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
-}
-
-function extractVal(field: any): string {
-  if (!field) return '';
-  if (typeof field === 'string') return field;
-  if (typeof field === 'object' && field.display_value) return field.display_value;
-  if (typeof field === 'object' && field.value) return field.value;
-  return String(field);
 }
