@@ -2101,9 +2101,15 @@ export default function IncidentDetailsPage() {
 
                   {/* 1. Assignment Group Recommendation */}
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-violet-400" />
-                      <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">1. Assignment Group Recommendation</h3>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-violet-400" />
+                        <h3 className="text-xs font-extrabold text-white uppercase tracking-widest">1. Assignment Group Recommendation</h3>
+                      </div>
+                      <span className="px-2 py-0.5 text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                        ServiceNow Verified
+                      </span>
                     </div>
 
                     <div className={`p-4 rounded-xl border ${

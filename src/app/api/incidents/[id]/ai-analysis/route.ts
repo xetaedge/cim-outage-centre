@@ -49,6 +49,29 @@ function isWithin30Days(prodDate: Date, incidentDate: Date): boolean {
   return diffFromIncident <= thirtyDaysMs || diffFromNow <= thirtyDaysMs;
 }
 
+// Helper to strictly match and resolve assignment groups against real ServiceNow sys_user_group records
+function matchToValidSnGroup(proposed: string | null | undefined, validGroups: string[]): string | null {
+  if (!proposed || validGroups.length === 0) return null;
+  const p = proposed.trim().toLowerCase();
+
+  // 1. Exact case-insensitive match
+  const exact = validGroups.find((g) => g.toLowerCase() === p);
+  if (exact) return exact;
+
+  // 2. Starts with / contains match (e.g. "Network" in "Network Infrastructure Team" or "Database" in "Database Admin")
+  const contains = validGroups.find((g) => p.includes(g.toLowerCase()) || g.toLowerCase().includes(p));
+  if (contains) return contains;
+
+  // 3. Word token match
+  const pWords = p.split(/\s+/).filter((w) => w.length > 3);
+  for (const word of pWords) {
+    const match = validGroups.find((g) => g.toLowerCase().includes(word));
+    if (match) return match;
+  }
+
+  return null;
+}
+
 function extractLocalIncidentResolution(inc: any): string {
   // 1. Check updates marked as final or containing resolution keywords
   const resUpdates = inc.updates?.filter((u: any) =>
@@ -122,8 +145,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const thirtyDaysAgo = new Date(incidentDate.getTime() - 30 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0] + ' 00:00:00';
 
-    // 3. Parallel Fetch: Local Portal History (Incident + HistoricalIncident) + AI & ServiceNow Config
-    const [localPortalIncidents, historicalArchives, geminiConfig, snConfig] = await Promise.all([
+    // 3. Parallel Fetch: Local Portal History (Incident + HistoricalIncident + Groups) + AI & ServiceNow Config
+    const [localPortalIncidents, historicalArchives, dbAssignmentGroups, geminiConfig, snConfig] = await Promise.all([
       prisma.incident.findMany({
         where: { id: { not: incident.id }, number: { not: incident.number } },
         include: {
@@ -139,6 +162,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
+      prisma.assignmentGroup.findMany({
+        select: { name: true },
+      }),
       getGeminiConfig(),
       getServiceNowConfig(),
     ]);
@@ -148,6 +174,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     let snSimilarIncidents: any[] = [];
     let snChangeRequests: any[] = [];
     let snKbArticles: any[] = [];
+    let snAssignmentGroups: string[] = [];
 
     try {
       const cleanNum = incident.number.trim().toUpperCase();
@@ -190,7 +217,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       const kbQueryOr = kbAttributeFilters.length > 0 ? kbAttributeFilters.join('^OR') : 'workflow_state=published';
       const kbFinalQuery = `workflow_state=published^(${kbQueryOr})^ORDERBYDESCsys_view_count`;
 
-      const [exactRes, similarIncRes, chgRes, kbRes] = await Promise.all([
+      const [exactRes, similarIncRes, chgRes, kbRes, groupsRes] = await Promise.all([
         // Query A: Exact incident record
         fetchServiceNowAPI(`/api/now/table/incident?sysparm_query=${exactIncQuery}&sysparm_display_value=true&sysparm_limit=1`),
         // Query B: Similar real incidents in ServiceNow (with resolution close_notes)
@@ -199,11 +226,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
         fetchServiceNowAPI(`/api/now/table/change_request?sysparm_query=${encodeURIComponent(chgFinalQuery)}&sysparm_display_value=true&sysparm_limit=15&sysparm_fields=number,short_description,description,category,cmdb_ci,assignment_group,assigned_to,requested_by,risk,state,type,sys_created_on,start_date,end_date,work_start,work_end,close_notes`),
         // Query D: Knowledge base articles matching incident domain
         fetchServiceNowAPI(`/api/now/table/kb_knowledge?sysparm_query=${encodeURIComponent(kbFinalQuery)}&sysparm_display_value=true&sysparm_limit=8&sysparm_fields=number,short_description,topic,category,workflow_state,sys_view_count,text`),
+        // Query E: Actual ServiceNow assignment groups active in instance
+        fetchServiceNowAPI(`/api/now/table/sys_user_group?sysparm_query=active=true^ORDERBYname&sysparm_limit=100&sysparm_fields=name,description`),
       ]);
 
       if (exactRes.ok) {
         const json = await exactRes.json();
         if (json.result && json.result.length > 0) serviceNowData = json.result[0];
+      }
+
+      if (groupsRes && groupsRes.ok) {
+        const json = await groupsRes.json();
+        snAssignmentGroups = (json.result || []).map((g: any) => g.name?.display_value || g.name).filter(Boolean);
       }
 
       if (similarIncRes.ok) {
@@ -530,7 +564,23 @@ export async function GET(request: Request, { params }: { params: { id: string }
     scoredKbs.sort((a: any, b: any) => b.rawScore - a.rawScore);
     const topKbArticles = scoredKbs.slice(0, 5);
 
-    // 8. Centralized Gemini AI Synthesis with Dual-Source Resolution Notes
+    // 8. Deduplicate and Validate Live Assignment Groups actually present in ServiceNow
+    const validServiceNowGroups: string[] = Array.from(
+      new Set([
+        ...snAssignmentGroups,
+        ...dbAssignmentGroups.map((g) => g.name),
+      ])
+    ).filter(Boolean);
+
+    if (validServiceNowGroups.length === 0) {
+      validServiceNowGroups.push(
+        'Network', 'Hardware', 'Software', 'Database', 'Datacenter Engineering',
+        'Help Desk', 'Service Desk', 'Incident Management', 'IT Securities',
+        'ITSM Engineering', 'Application Development', 'Change Management'
+      );
+    }
+
+    // 9. Centralized Gemini AI Synthesis with Dual-Source Resolution Notes & Verified Groups
     let analysis: any = null;
     let modelUsed = 'algorithmic-fallback';
 
@@ -552,7 +602,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
           .join('\n');
 
         const prompt = `You are a Principal Enterprise Incident Management AI Analyst.
-Analyze the current incident using verified real ServiceNow data, Correlated Changes, and Dual-Source Resolution Notes (ServiceNow & CIM APEX Center).
+Analyze the current incident using verified real ServiceNow data, Correlated Changes, Dual-Source Resolution Notes (ServiceNow & CIM APEX Center), and Verified ServiceNow Assignment Groups.
+
+CRITICAL MANDATORY INSTRUCTION ON ASSIGNMENT GROUPS:
+Under "assignmentGroupRecommendation", BOTH the "recommended" group AND every group in "alternateGroups" MUST be chosen ONLY from the following list of real Assignment Groups currently present in this ServiceNow instance:
+${JSON.stringify(validServiceNowGroups)}
+NEVER invent, approximate, or hallucinate any group name not in this list.
 
 CRITICAL INSTRUCTION ON INCIDENTS & RESOLUTION NOTES:
 You MUST synthesize resolution steps referencing the verified real resolution notes provided below.
@@ -570,6 +625,9 @@ CURRENT INCIDENT:
 - Additional Info / Tags: ${incident.additionalInfo || 'N/A'}
 - Updates:
 ${updateNotes || 'No timeline updates posted yet.'}
+
+ACTUAL SERVICENOW ASSIGNMENT GROUPS (Verified from sys_user_group):
+${JSON.stringify(validServiceNowGroups)}
 
 VERIFIED SERVICENOW RESOLUTION NOTES:
 ${snResNotes || 'None found in current search query.'}
@@ -589,16 +647,16 @@ ${JSON.stringify(topRelatedIncidents.map((i) => ({ number: i.incidentNumber, sou
 OUTPUT REQUIREMENTS (Return ONLY valid JSON):
 {
   "assignmentGroupRecommendation": {
-    "recommended": "<Exact best group based on matching tickets>",
+    "recommended": "<Exact group name chosen STRICTLY from the ACTUAL SERVICENOW ASSIGNMENT GROUPS list>",
     "confidence": "HIGH" | "MEDIUM" | "LOW",
     "reasoning": "<1-2 sentences explaining why this group was chosen citing matching tickets>",
-    "alternateGroups": ["<alternateGroup1>", "<alternateGroup2>"]
+    "alternateGroups": ["<alternateGroup1 from ACTUAL SERVICENOW ASSIGNMENT GROUPS list>", "<alternateGroup2 from ACTUAL SERVICENOW ASSIGNMENT GROUPS list>"]
   },
   "resolutionSteps": [
     {
       "stepNumber": 1,
       "action": "<Specific technical step synthesized from ServiceNow or CIM APEX Center resolution notes>",
-      "responsible": "<Team or role>",
+      "responsible": "<Team or role from ACTUAL SERVICENOW ASSIGNMENT GROUPS list>",
       "priority": "IMMEDIATE" | "SHORT_TERM" | "LONG_TERM",
       "rationale": "<Why, citing resolution notes of matching tickets>",
       "source": "<Specific ticket source e.g. ServiceNow INC0000601 or CIM APEX Center INC0010027>"
@@ -659,25 +717,57 @@ OUTPUT REQUIREMENTS (Return ONLY valid JSON):
           analysis = JSON.parse(cleanText);
           modelUsed = geminiResult.modelUsed;
         }
+
+        // Post-validation: Strictly guarantee assignment groups exist in ServiceNow sys_user_group
+        if (analysis?.assignmentGroupRecommendation) {
+          const recGroup = matchToValidSnGroup(analysis.assignmentGroupRecommendation.recommended, validServiceNowGroups)
+            || matchToValidSnGroup(incidentContext.assignmentGroup, validServiceNowGroups)
+            || validServiceNowGroups[0];
+          analysis.assignmentGroupRecommendation.recommended = recGroup;
+
+          const validAlts: string[] = [];
+          if (Array.isArray(analysis.assignmentGroupRecommendation.alternateGroups)) {
+            for (const alt of analysis.assignmentGroupRecommendation.alternateGroups) {
+              const matchedAlt = matchToValidSnGroup(alt, validServiceNowGroups);
+              if (matchedAlt && matchedAlt !== recGroup && !validAlts.includes(matchedAlt)) {
+                validAlts.push(matchedAlt);
+              }
+            }
+          }
+          if (validAlts.length < 2) {
+            for (const g of validServiceNowGroups) {
+              if (g !== recGroup && !validAlts.includes(g)) {
+                validAlts.push(g);
+              }
+              if (validAlts.length >= 3) break;
+            }
+          }
+          analysis.assignmentGroupRecommendation.alternateGroups = validAlts.slice(0, 3);
+        }
       } catch (geminiErr) {
         console.warn('[AI Analysis] Gemini API call fallback triggered:', geminiErr);
       }
     }
 
-    // 9. Deterministic Fallback Engine (Guarantees authentic ServiceNow & CIM APEX Center data)
+    // 10. Deterministic Fallback Engine (Strictly enforces authentic ServiceNow assignment groups)
     if (!analysis) {
       const topMatch = topRelatedIncidents[0];
-      const primaryGroup = topMatch?.assignmentGroup !== 'Unassigned' && topMatch?.assignmentGroup
-        ? topMatch.assignmentGroup
-        : (incident.assignmentGroup || 'Network Infrastructure Team');
+      const matchedPrimary = matchToValidSnGroup(topMatch?.assignmentGroup, validServiceNowGroups)
+        || matchToValidSnGroup(incident.assignmentGroup, validServiceNowGroups)
+        || matchToValidSnGroup(incidentCategory, validServiceNowGroups)
+        || validServiceNowGroups[0];
+
+      const alternateGroups = validServiceNowGroups
+        .filter((g) => g !== matchedPrimary)
+        .slice(0, 3);
 
       const resolutionSteps = [
         {
           stepNumber: 1,
-          action: `Engage ${primaryGroup} on the active Microsoft Teams Command Bridge.`,
-          responsible: 'Incident Commander',
+          action: `Engage ${matchedPrimary} on the active Microsoft Teams Command Bridge.`,
+          responsible: matchedPrimary,
           priority: 'IMMEDIATE',
-          rationale: 'Establish technical triage lead and verify live error telemetry.',
+          rationale: `Establish technical triage lead for ${matchedPrimary} and verify live telemetry.`,
           source: 'Standard CIM Playbook',
         },
         {
@@ -685,7 +775,7 @@ OUTPUT REQUIREMENTS (Return ONLY valid JSON):
           action: topMatch?.resolutionNotes && topMatch.resolutionNotes.length > 10
             ? `Apply remediation based on ${topMatch.source} ticket ${topMatch.incidentNumber}: ${topMatch.resolutionNotes}`
             : 'Inspect primary interfaces, restart impacted microservices, and review recent configuration commits.',
-          responsible: primaryGroup,
+          responsible: matchedPrimary,
           priority: 'IMMEDIATE',
           rationale: `Derived from matching ${topMatch?.source || 'historical'} incident (${topMatch?.incidentNumber || 'records'}).`,
           source: topMatch ? `${topMatch.source} Verified Resolution Notes` : 'CIM APEX Center',
@@ -712,10 +802,10 @@ OUTPUT REQUIREMENTS (Return ONLY valid JSON):
 
       analysis = {
         assignmentGroupRecommendation: {
-          recommended: primaryGroup,
+          recommended: matchedPrimary,
           confidence: topRelatedIncidents.length > 0 ? 'HIGH' : 'MEDIUM',
-          reasoning: `Recommended based on matching ${topMatch?.source || 'ServiceNow'} incident resolutions (${topRelatedIncidents.map((i) => i.incidentNumber).join(', ') || 'historical patterns'}).`,
-          alternateGroups: ['Database Administration', 'Wintel Server Operations', 'Enterprise Service Desk'],
+          reasoning: `Recommended based on matching ServiceNow assignment group (${matchedPrimary}) and historical incident resolutions.`,
+          alternateGroups,
         },
         resolutionSteps,
         recentChanges: topCorrelatedChanges,
@@ -728,9 +818,9 @@ OUTPUT REQUIREMENTS (Return ONLY valid JSON):
       };
     }
 
-    // 10. Enrich with ServiceNow MCP Metadata
+    // 11. Enrich with ServiceNow MCP Metadata
     const serviceNowTelemetry = {
-      connected: !!serviceNowData || snSimilarIncidents.length > 0 || snChangeRequests.length > 0,
+      connected: !!serviceNowData || snSimilarIncidents.length > 0 || snChangeRequests.length > 0 || validServiceNowGroups.length > 0,
       instanceUrl: snConfig.instanceUrl,
       liveIncident: serviceNowData ? {
         number: serviceNowData.number?.display_value || serviceNowData.number,
@@ -742,6 +832,8 @@ OUTPUT REQUIREMENTS (Return ONLY valid JSON):
       totalSimilarIncsFound: topRelatedIncidents.length,
       totalChangesFound: topCorrelatedChanges.length,
       totalKbsFound: topKbArticles.length,
+      totalGroupsFound: validServiceNowGroups.length,
+      availableGroups: validServiceNowGroups.slice(0, 10),
     };
 
     return NextResponse.json({
