@@ -14,6 +14,7 @@ interface CimState {
   currentRole: UserRole;
   userEmail: string;
   userName: string;
+  timeZone: string;
   searchQuery: string;
   priorityFilter: string;
   statusFilter: string;
@@ -25,7 +26,8 @@ interface CimState {
   toasts: ToastNotification[];
   refreshTrigger: number;
 
-  setUser: (user: { id: string; name: string; email: string; role: UserRole }) => void;
+  setUser: (user: { id: string; name: string; email: string; role: UserRole; timeZone?: string }) => void;
+  setTimeZone: (tz: string) => void;
   setRole: (role: UserRole) => void;
   setSearchQuery: (query: string) => void;
   setPriorityFilter: (p: string) => void;
@@ -44,6 +46,7 @@ export const useCimStore = create<CimState>((set, get) => ({
   currentRole: 'GUEST',
   userEmail: '',
   userName: '',
+  timeZone: typeof window !== 'undefined' ? (localStorage.getItem('cim_timezone') || 'UTC') : 'UTC',
   searchQuery: '',
   priorityFilter: 'ALL',
   statusFilter: 'ALL',
@@ -71,11 +74,23 @@ export const useCimStore = create<CimState>((set, get) => ({
   refreshTrigger: 0,
 
   setUser: (user) => {
+    const tz = user.timeZone || get().timeZone || 'UTC';
+    if (typeof window !== 'undefined' && user.timeZone) {
+      localStorage.setItem('cim_timezone', user.timeZone);
+    }
     set({
       currentRole: user.role,
       userName: user.name,
       userEmail: user.email,
+      timeZone: tz,
     });
+  },
+
+  setTimeZone: (tz: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cim_timezone', tz);
+    }
+    set({ timeZone: tz });
   },
 
   setRole: (role: UserRole) => {

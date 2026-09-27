@@ -9,6 +9,7 @@ export interface UserSession {
   name: string;
   email: string;
   role: UserRole;
+  timeZone?: string;
 }
 
 export function signToken(user: UserSession): string {

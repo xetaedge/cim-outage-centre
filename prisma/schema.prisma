@@ -12,6 +12,7 @@ model User {
   name         String
   email        String     @unique
   role         String     @default("INCIDENT_MANAGER") // ADMIN, INCIDENT_MANAGER, GUEST
+  timeZone     String?    @default("UTC")
   passwordHash String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
