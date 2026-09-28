@@ -36,6 +36,7 @@ export async function GET(request: Request) {
     const assignmentGroup = searchParams.get('assignmentGroup');
     const keyword = searchParams.get('keyword');
     const cti = searchParams.get('cti');
+    const tag = searchParams.get('tag') || searchParams.get('closeTag');
     const siteId = searchParams.get('siteId');
     const cmdbCi = searchParams.get('cmdbCi');
 
@@ -67,6 +68,12 @@ export async function GET(request: Request) {
 
     if (cmdbCi) {
       andConditions.push({ cmdbCi });
+    }
+
+    if (tag) {
+      andConditions.push({
+        closeTags: { contains: tag, mode: 'insensitive' },
+      });
     }
 
     if (keyword) {
@@ -114,6 +121,7 @@ export async function GET(request: Request) {
     const mttrWeekMap = new Map<string, { total: number; count: number }>();
     const topSitesMap = new Map<string, number>();
     const assignmentGroupsMap = new Map<string, number>();
+    const issueTypeMap = new Map<string, number>();
 
     let totalMttrMinutes = 0;
     let resolvedMttrCount = 0;
@@ -166,9 +174,38 @@ export async function GET(request: Request) {
       if (inc.assignmentGroup) {
         assignmentGroupsMap.set(inc.assignmentGroup, (assignmentGroupsMap.get(inc.assignmentGroup) || 0) + 1);
       }
+
+      // Closure Issue Tags
+      if (inc.closeTags) {
+        const cTags = inc.closeTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+        for (const t of cTags) {
+          issueTypeMap.set(t, (issueTypeMap.get(t) || 0) + 1);
+        }
+      }
     }
 
     const avgMttr = resolvedMttrCount > 0 ? (totalMttrMinutes / resolvedMttrCount).toFixed(1) + 'm' : '0m';
+
+    const [allSites, allGroups, allCtis, allTags] = await Promise.all([
+      prisma.site.findMany({ select: { id: true, name: true, code: true } }),
+      prisma.incident.findMany({ select: { assignmentGroup: true }, distinct: ['assignmentGroup'] }),
+      prisma.incident.findMany({ select: { cti: true }, distinct: ['cti'] }),
+      prisma.closureTag.findMany({ where: { active: true }, orderBy: { order: 'asc' }, select: { name: true, color: true } }),
+    ]);
+
+    const tagColorMap = new Map<string, string>();
+    for (const t of allTags) {
+      tagColorMap.set(t.name.toLowerCase(), t.color || '#3b82f6');
+    }
+
+    const issueTypeDistribution = Array.from(issueTypeMap.entries())
+      .map(([name, count]) => ({
+        name,
+        count,
+        value: count,
+        color: tagColorMap.get(name.toLowerCase()) || '#6366f1',
+      }))
+      .sort((a, b) => b.count - a.count);
 
     const analytics = {
       incidentsOverTime: Array.from(incidentsOverTimeMap.entries()).map(([date, count]) => ({ date, count })),
@@ -182,6 +219,7 @@ export async function GET(request: Request) {
         value,
         color: STATUS_COLORS[name] || '#9CA3AF'
       })),
+      issueTypeDistribution,
       mttrTrend: Array.from(mttrWeekMap.entries()).map(([period, data]) => ({
         period,
         avgMttr: Math.round(data.total / data.count)
@@ -207,16 +245,11 @@ export async function GET(request: Request) {
       openCount,
     };
 
-    const [allSites, allGroups, allCtis] = await Promise.all([
-      prisma.site.findMany({ select: { id: true, name: true, code: true } }),
-      prisma.incident.findMany({ select: { assignmentGroup: true }, distinct: ['assignmentGroup'] }),
-      prisma.incident.findMany({ select: { cti: true }, distinct: ['cti'] }),
-    ]);
-
     const filterOptions = {
       sites: allSites.map(s => ({ id: s.id, name: `${s.name} (${s.code})` })),
       assignmentGroups: allGroups.map(g => g.assignmentGroup).filter(Boolean),
       ctis: allCtis.map(c => c.cti).filter(Boolean),
+      closureTags: allTags.map(t => ({ name: t.name, color: t.color })),
     };
 
     return NextResponse.json({

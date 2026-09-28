@@ -5,7 +5,7 @@ import {
   FileBarChart, Filter, Download, Search, Brain, RefreshCw, Loader2,
   BarChart2, PieChart as PieIcon, TrendingUp, MapPin, Users, Clock,
   AlertTriangle, CheckCircle2, Activity, ChevronDown, ChevronUp,
-  ArrowUpDown, Sparkles, Target, Lightbulb, Timer, ExternalLink
+  ArrowUpDown, Sparkles, Target, Lightbulb, Timer, ExternalLink, Tag
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell,
@@ -33,7 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
   CLOSED: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
 };
 
-const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1'];
 
 interface Incident {
   id: string;
@@ -45,6 +45,8 @@ interface Incident {
   sites: string;
   openedAt: string;
   mttr: number;
+  closeTags?: string;
+  closeNotes?: string;
 }
 
 export default function ReportsAndInsights() {
@@ -77,10 +79,12 @@ export default function ReportsAndInsights() {
     sites: { id: string; name: string }[];
     assignmentGroups: string[];
     ctis: string[];
+    closureTags?: { name: string; color?: string }[];
   }>({
     sites: [],
     assignmentGroups: [],
     ctis: [],
+    closureTags: [],
   });
 
   // Sorting
@@ -100,7 +104,7 @@ export default function ReportsAndInsights() {
       if (filters.assignmentGroup) queryParams.append('assignmentGroup', filters.assignmentGroup);
       if (filters.location) queryParams.append('siteId', filters.location);
       if (filters.keyword) queryParams.append('keyword', filters.keyword);
-      if (filters.tag) queryParams.append('cti', filters.tag);
+      if (filters.tag) queryParams.append('tag', filters.tag);
 
       const res = await fetch(`/api/reports?${queryParams.toString()}`);
       
@@ -110,7 +114,7 @@ export default function ReportsAndInsights() {
         return;
       }
       const data = await res.json();
-      // Map API incidents (with ettrMinutes and sites relation) to page format
+      // Map API incidents (with ettrMinutes, sites relation, closeTags) to page format
       const mapped = (data.incidents || []).map((inc: any) => ({
         id: inc.id,
         number: inc.number,
@@ -121,6 +125,8 @@ export default function ReportsAndInsights() {
         sites: inc.sites?.map((s: any) => s.site?.name || s.name).join(', ') || 'N/A',
         openedAt: inc.openedAt,
         mttr: (inc.ettrMinutes || 0) / 60,
+        closeTags: inc.closeTags,
+        closeNotes: inc.closeNotes,
       }));
       setIncidents(mapped);
       setAnalytics(data.analytics ? {
@@ -166,7 +172,17 @@ export default function ReportsAndInsights() {
       mttrTrend: [{ name: 'Week 1', mttr: 4.2 }, { name: 'Week 2', mttr: 3.8 }, { name: 'Week 3', mttr: 3.5 }, { name: 'Week 4', mttr: 3.4 }],
       topSites: [{ name: 'Primary DC', value: 45 }, { name: 'Cloud Region A', value: 32 }, { name: 'Secondary DC', value: 20 }, { name: 'Branch Office', value: 15 }],
       topAssignmentGroups: [{ name: 'Network Ops', value: 30 }, { name: 'DBA Team', value: 25 }, { name: 'Backend API', value: 20 }, { name: 'IAM Team', value: 15 }],
-      statusDistribution: [{ name: 'INVESTIGATING', value: 10 }, { name: 'IDENTIFIED', value: 15 }, { name: 'MONITORING', value: 10 }, { name: 'RESOLVED', value: 60 }, { name: 'CLOSED', value: 29 }]
+      statusDistribution: [{ name: 'INVESTIGATING', value: 10 }, { name: 'IDENTIFIED', value: 15 }, { name: 'MONITORING', value: 10 }, { name: 'RESOLVED', value: 60 }, { name: 'CLOSED', value: 29 }],
+      issueTypeDistribution: [
+        { name: 'Power Issue', count: 18, value: 18, color: '#f59e0b' },
+        { name: 'Internet Issue', count: 24, value: 24, color: '#3b82f6' },
+        { name: 'Fiber Cut', count: 12, value: 12, color: '#ef4444' },
+        { name: 'Server Issue', count: 16, value: 16, color: '#8b5cf6' },
+        { name: 'Network Issue', count: 20, value: 20, color: '#06b6d4' },
+        { name: 'Application Issue', count: 15, value: 15, color: '#6366f1' },
+        { name: 'CDM Issue', count: 8, value: 8, color: '#10b981' },
+        { name: 'Services Issue', count: 11, value: 11, color: '#ec4899' },
+      ],
     });
   };
 
@@ -255,8 +271,8 @@ export default function ReportsAndInsights() {
   };
 
   const sortedIncidents = [...incidents].sort((a, b) => {
-    const valA = a[sortField];
-    const valB = b[sortField];
+    const valA = a[sortField] ?? '';
+    const valB = b[sortField] ?? '';
     if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
     if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
     return 0;
@@ -375,16 +391,26 @@ export default function ReportsAndInsights() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">CTI / Tag</label>
+                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Issue Closure Tag</span>
+                  </label>
                   <select 
                     value={filters.tag} 
                     onChange={e => setFilters({...filters, tag: e.target.value})} 
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all"
                   >
-                    <option value="">All CTIs / Tags</option>
-                    {filterOptions.ctis.map(c => (
-                      <option key={c} value={c}>{c}</option>
+                    <option value="">All Issue Categories & Tags</option>
+                    {(filterOptions.closureTags || []).map((t: any) => (
+                      <option key={t.name} value={t.name}>🏷️ {t.name}</option>
                     ))}
+                    {filterOptions.ctis.length > 0 && (
+                      <optgroup label="ServiceNow CTI">
+                        {filterOptions.ctis.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 
@@ -544,6 +570,73 @@ export default function ReportsAndInsights() {
                 </div>
               </div>
 
+              {/* Issue Category Distribution (Closure Tags) */}
+              <div className="glass-card border border-purple-500/30 rounded-2xl p-5 bg-slate-900/50 backdrop-blur-xl md:col-span-2 lg:col-span-2">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-purple-400" />
+                    Issue Category Distribution (Closure Tags)
+                  </h3>
+                  <span className="text-[11px] text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 rounded-full font-bold">
+                    Root Cause Telemetry
+                  </span>
+                </div>
+                {analytics.issueTypeDistribution && analytics.issueTypeDistribution.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analytics.issueTypeDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {analytics.issueTypeDistribution.map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={entry.color || CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff', borderRadius: '12px', fontSize: '12px' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                      {analytics.issueTypeDistribution.map((entry: any, index: number) => (
+                        <div
+                          key={index}
+                          onClick={() => setFilters((prev) => ({ ...prev, tag: entry.name }))}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80 hover:border-purple-500/50 cursor-pointer transition-all group"
+                          title={`Click to filter by ${entry.name}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                            <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors">{entry.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-purple-300">{entry.count} incidents</span>
+                            <span className="text-[10px] text-slate-500">
+                              ({Math.round((entry.count / (kpis.total || 1)) * 100)}%)
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-64 flex flex-col items-center justify-center text-slate-500 space-y-2">
+                    <Tag className="w-8 h-8 text-slate-600" />
+                    <p className="text-xs">No incidents have been closed with Issue Tags in this filter range.</p>
+                  </div>
+                )}
+              </div>
+
             </div>
           ) : (
             <div className="h-96 flex items-center justify-center border border-slate-800 border-dashed rounded-2xl bg-slate-900/30">
@@ -697,6 +790,7 @@ export default function ReportsAndInsights() {
                   <th className="p-4 font-medium cursor-pointer hover:text-slate-200 transition-colors" onClick={() => toggleSort('status')}>
                     <div className="flex items-center gap-1">Status <ArrowUpDown className="w-3 h-3" /></div>
                   </th>
+                  <th className="p-4 font-medium">Issue Tag(s)</th>
                   <th className="p-4 font-medium cursor-pointer hover:text-slate-200 transition-colors" onClick={() => toggleSort('assignmentGroup')}>
                     <div className="flex items-center gap-1">Assignment Group <ArrowUpDown className="w-3 h-3" /></div>
                   </th>
@@ -712,14 +806,14 @@ export default function ReportsAndInsights() {
               <tbody className="divide-y divide-slate-800/50">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center">
+                    <td colSpan={9} className="p-8 text-center">
                       <Loader2 className="w-6 h-6 text-accent animate-spin mx-auto mb-2" />
                       <p className="text-slate-400 text-sm">Loading records...</p>
                     </td>
                   </tr>
                 ) : sortedIncidents.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="p-8 text-center text-slate-400 text-sm">
                       No incidents found matching current filters.
                     </td>
                   </tr>
@@ -739,6 +833,22 @@ export default function ReportsAndInsights() {
                         <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${STATUS_COLORS[inc.status] || 'bg-slate-800 text-slate-300 border-slate-700'}`}>
                           {inc.status}
                         </span>
+                      </td>
+                      <td className="p-4">
+                        {inc.closeTags ? (
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {inc.closeTags.split(',').map((t, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-500/20 text-purple-200 border border-purple-500/30 whitespace-nowrap"
+                              >
+                                {t.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-600 text-xs italic">-</span>
+                        )}
                       </td>
                       <td className="p-4 text-sm text-slate-300">{inc.assignmentGroup}</td>
                       <td className="p-4 text-sm text-slate-400">{inc.sites}</td>

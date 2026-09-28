@@ -92,6 +92,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       partnerLead,
       cdItCoordinator,
       stakeholdersInformed,
+      closeTags,
+      closeNotes,
     } = body;
 
     const updateData: any = {};
@@ -118,6 +120,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (partnerLead !== undefined) updateData.partnerLead = partnerLead;
     if (cdItCoordinator !== undefined) updateData.cdItCoordinator = cdItCoordinator;
     if (stakeholdersInformed !== undefined) updateData.stakeholdersInformed = stakeholdersInformed;
+    if (closeTags !== undefined) updateData.closeTags = closeTags;
+    if (closeNotes !== undefined) updateData.closeNotes = closeNotes;
 
     const updated = await prisma.incident.update({
       where: { id: existing.id },
@@ -156,12 +160,14 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 
     // Audit log
+    const tagInfo = closeTags ? ` | Tags: ${closeTags}` : existing.closeTags ? ` | Tags: ${existing.closeTags}` : '';
+    const noteInfo = closeNotes ? ` | Notes: ${closeNotes.slice(0, 50)}${closeNotes.length > 50 ? '...' : ''}` : '';
     await prisma.auditLog.create({
       data: {
         userName: 'Incident Manager',
         userRole: 'INCIDENT_MANAGER',
         action: status === 'CLOSED' ? 'INCIDENT_CLOSED' : 'INCIDENT_UPDATED',
-        details: `Updated incident ${existing.number}: status -> ${status || existing.status}`,
+        details: `Updated incident ${existing.number}: status -> ${status || existing.status}${tagInfo}${noteInfo}`,
       },
     });
 

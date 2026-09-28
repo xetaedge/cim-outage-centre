@@ -34,6 +34,9 @@ import {
   Wrench,
   Terminal,
   Code2,
+  Tag,
+  RotateCcw,
+  Palette,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
 
@@ -46,7 +49,7 @@ export default function AdminSettingsPage() {
   const [teamsWebhook, setTeamsWebhook] = useState('https://outlook.office.com/webhook/cim-incidents');
 
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'ai' | 'microsoft' | 'servicenow' | 'users' | 'groups' | 'notifications' | 'bulk' | 'all'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'microsoft' | 'servicenow' | 'users' | 'groups' | 'tags' | 'notifications' | 'bulk' | 'all'>('ai');
 
   // Microsoft Teams Plug & Play API Configuration State
   const [teamsAppName, setTeamsAppName] = useState('Graph Java quick start');
@@ -109,6 +112,18 @@ export default function AdminSettingsPage() {
   const [editingGroupName, setEditingGroupName] = useState('');
   const [editingGroupEmail, setEditingGroupEmail] = useState('');
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
+
+  // Closure Issue Tags State
+  const [closureTags, setClosureTags] = useState<any[]>([]);
+  const [loadingClosureTags, setLoadingClosureTags] = useState(false);
+  const [savingTag, setSavingTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagDescription, setNewTagDescription] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#3b82f6');
+  const [editingTagId, setEditingTagId] = useState<string | null>(null);
+  const [editingTagName, setEditingTagName] = useState('');
+  const [editingTagDescription, setEditingTagDescription] = useState('');
+  const [editingTagColor, setEditingTagColor] = useState('#3b82f6');
 
   // Load existing configurations from DB on mount
   const fetchSettings = async () => {
@@ -183,10 +198,139 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const fetchClosureTags = async () => {
+    setLoadingClosureTags(true);
+    try {
+      const res = await fetch('/api/admin/closure-tags');
+      const data = await res.json();
+      if (data.success && data.tags) {
+        setClosureTags(data.tags);
+      }
+    } catch (e) {
+      console.error('Failed to load closure tags:', e);
+    } finally {
+      setLoadingClosureTags(false);
+    }
+  };
+
+  const handleCreateClosureTag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTagName.trim()) return;
+    setSavingTag(true);
+    try {
+      const res = await fetch('/api/admin/closure-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTagName.trim(),
+          description: newTagDescription.trim() || undefined,
+          color: newTagColor,
+          active: true,
+          order: closureTags.length + 1,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({ title: '✅ Closure Tag Added', message: `Added tag: ${newTagName}`, type: 'update' });
+        setNewTagName('');
+        setNewTagDescription('');
+        setNewTagColor('#3b82f6');
+        fetchClosureTags();
+      } else {
+        alert(data.error || 'Failed to add closure tag');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error adding closure tag');
+    } finally {
+      setSavingTag(false);
+    }
+  };
+
+  const handleUpdateClosureTag = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/closure-tags/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingTagName.trim(),
+          description: editingTagDescription.trim(),
+          color: editingTagColor,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({ title: '✅ Closure Tag Updated', message: `Saved changes`, type: 'update' });
+        setEditingTagId(null);
+        fetchClosureTags();
+      } else {
+        alert(data.error || 'Failed to update tag');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error updating tag');
+    }
+  };
+
+  const handleToggleTagActive = async (tag: any) => {
+    try {
+      const res = await fetch(`/api/admin/closure-tags/${tag.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !tag.active }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({
+          title: tag.active ? '⏸️ Tag Deactivated' : '▶️ Tag Activated',
+          message: `${tag.name} is now ${tag.active ? 'disabled' : 'enabled'} for incident closures`,
+          type: 'update',
+        });
+        fetchClosureTags();
+      }
+    } catch (e: any) {
+      alert(e.message || 'Failed to toggle tag status');
+    }
+  };
+
+  const handleDeleteClosureTag = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete closure tag "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/admin/closure-tags/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        addToast({ title: '🗑️ Closure Tag Deleted', message: `Deleted ${name}`, type: 'update' });
+        fetchClosureTags();
+      }
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete tag');
+    }
+  };
+
+  const handleResetDefaultTags = async () => {
+    if (!confirm('Restore all 8 standard closure tags (Power Issue, Internet Issue, Fiber Cut, Server Issue, Network Issue, Application Issue, CDM Issue, Services Issue)?')) return;
+    setLoadingClosureTags(true);
+    try {
+      const res = await fetch('/api/admin/closure-tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_defaults' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast({ title: '🔄 Standard Tags Restored', message: 'Restored 8 default issue categories', type: 'update' });
+        fetchClosureTags();
+      }
+    } catch (e: any) {
+      alert(e.message || 'Failed to restore default tags');
+    } finally {
+      setLoadingClosureTags(false);
+    }
+  };
+
   useEffect(() => {
     fetchSettings();
     fetchUsers();
     fetchAssignmentGroups();
+    fetchClosureTags();
   }, []);
 
   useEffect(() => {
@@ -606,6 +750,7 @@ export default function AdminSettingsPage() {
           { id: 'servicenow', label: '⚙️ ServiceNow' },
           { id: 'users', label: '👥 Users & Access' },
           { id: 'groups', label: '🏷️ Assignment Groups' },
+          { id: 'tags', label: '🏷️ Closure Issue Tags', badge: 'Standard' },
           { id: 'notifications', label: '📧 Notifications' },
           { id: 'bulk', label: '📦 Bulk Upload' },
           { id: 'all', label: '📋 View All' },
@@ -1083,6 +1228,252 @@ export default function AdminSettingsPage() {
           </table>
         </div>
       </div>
+      )}
+
+      {/* Incident Closure Issue Tags Management Section */}
+      {(activeTab === 'tags' || activeTab === 'all') && (
+        <div className="glass-card p-6 border border-slate-800 rounded-2xl space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                <Tag className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  Incident Closure Issue Tags
+                  <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
+                    {closureTags.length} Tags ({closureTags.filter((t) => t.active).length} Active)
+                  </span>
+                </h2>
+                <p className="text-xs text-secondaryText">
+                  Standardized issue tags selected when closing incidents (e.g., Power Issue, Internet Issue, Fiber Cut). These tags power executive root-cause breakdown charts and operational insights in Reports.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetDefaultTags}
+              disabled={loadingClosureTags}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 border border-slate-700"
+              title="Reset to 8 standard issue types"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-purple-400" />
+              <span>Restore 8 Standard Defaults</span>
+            </button>
+          </div>
+
+          {/* Add Tag Form */}
+          <form onSubmit={handleCreateClosureTag} className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3">
+            <p className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5 text-purple-400" />
+              Add New Issue Category Tag
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-4">
+                <input
+                  type="text"
+                  required
+                  placeholder="Tag Name (e.g. Hardware Fault)"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  className="w-full bg-slate-850 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <div className="md:col-span-5">
+                <input
+                  type="text"
+                  placeholder="Description (e.g. Physical host, disk, or PSU defect)"
+                  value={newTagDescription}
+                  onChange={(e) => setNewTagDescription(e.target.value)}
+                  className="w-full bg-slate-850 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <div className="md:col-span-3 flex items-center gap-2">
+                {/* Color presets dropdown / picker */}
+                <div className="flex items-center space-x-1 bg-slate-850 border border-slate-700 rounded-xl p-1.5">
+                  {[
+                    '#f59e0b', // Amber
+                    '#3b82f6', // Blue
+                    '#ef4444', // Red
+                    '#8b5cf6', // Purple
+                    '#06b6d4', // Cyan
+                    '#6366f1', // Indigo
+                    '#10b981', // Emerald
+                    '#ec4899', // Pink
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setNewTagColor(color)}
+                      className={`w-4 h-4 rounded-full transition-transform ${
+                        newTagColor === color ? 'scale-125 ring-2 ring-white ring-offset-1 ring-offset-slate-900' : 'hover:scale-110 opacity-70 hover:opacity-100'
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingTag}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                >
+                  {savingTag ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>Add</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Tags Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                  <th className="py-3 px-4">Tag / Preview</th>
+                  <th className="py-3 px-4">Description</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-850">
+                {loadingClosureTags ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-slate-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-purple-400" />
+                      Loading Closure Tags...
+                    </td>
+                  </tr>
+                ) : closureTags.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-slate-500">
+                      No closure tags configured. Click &quot;Restore 8 Standard Defaults&quot; above to initialize.
+                    </td>
+                  </tr>
+                ) : (
+                  closureTags.map((tag) => (
+                    <tr key={tag.id} className="hover:bg-slate-900/50 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-white">
+                        {editingTagId === tag.id ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={editingTagName}
+                              onChange={(e) => setEditingTagName(e.target.value)}
+                              className="bg-slate-850 border border-purple-500 rounded-lg p-1 text-xs text-white w-full"
+                            />
+                            <div className="flex items-center space-x-1">
+                              {[
+                                '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6',
+                                '#06b6d4', '#6366f1', '#10b981', '#ec4899',
+                              ].map((c) => (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => setEditingTagColor(c)}
+                                  className={`w-3.5 h-3.5 rounded-full ${
+                                    editingTagColor === c ? 'scale-125 ring-2 ring-white' : 'opacity-70'
+                                  }`}
+                                  style={{ backgroundColor: c }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className="px-2.5 py-1 text-xs font-bold rounded-lg border flex items-center gap-1.5"
+                              style={{
+                                backgroundColor: `${tag.color || '#3b82f6'}15`,
+                                borderColor: `${tag.color || '#3b82f6'}40`,
+                                color: tag.color || '#93c5fd',
+                              }}
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: tag.color || '#3b82f6' }}
+                              />
+                              {tag.name}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 text-xs">
+                        {editingTagId === tag.id ? (
+                          <input
+                            type="text"
+                            value={editingTagDescription}
+                            onChange={(e) => setEditingTagDescription(e.target.value)}
+                            className="bg-slate-850 border border-purple-500 rounded-lg p-1 text-xs text-white w-full"
+                          />
+                        ) : (
+                          tag.description || <span className="text-slate-600 italic">No description</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTagActive(tag)}
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded-full border transition-all ${
+                            tag.active
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                              : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-750'
+                          }`}
+                        >
+                          {tag.active ? '● Active' : '○ Disabled'}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end space-x-1.5">
+                          {editingTagId === tag.id ? (
+                            <>
+                              <button
+                                onClick={() => handleUpdateClosureTag(tag.id)}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center space-x-1"
+                              >
+                                <Save className="w-3 h-3" />
+                                <span>Save</span>
+                              </button>
+                              <button
+                                onClick={() => setEditingTagId(null)}
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingTagId(tag.id);
+                                  setEditingTagName(tag.name);
+                                  setEditingTagDescription(tag.description || '');
+                                  setEditingTagColor(tag.color || '#3b82f6');
+                                }}
+                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors"
+                                title="Edit Tag"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClosureTag(tag.id, tag.name)}
+                                className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20"
+                                title="Delete Tag"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Live ServiceNow Configuration Form */}

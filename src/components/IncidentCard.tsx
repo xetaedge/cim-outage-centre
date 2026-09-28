@@ -13,8 +13,10 @@ import {
   Users,
   Building,
   Timer,
+  Tag,
 } from 'lucide-react';
 import { useCimStore } from '@/store/useCimStore';
+import CloseIncidentModal from './CloseIncidentModal';
 
 export interface SiteRelation {
   site: {
@@ -68,6 +70,8 @@ export interface IncidentData {
   partnerLead?: string;
   cdItCoordinator?: string;
   stakeholdersInformed?: string;
+  closeTags?: string;
+  closeNotes?: string;
   sites?: SiteRelation[];
   updates?: TimelineUpdate[];
 }
@@ -87,6 +91,7 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   const [closing, setClosing] = useState(false);
   const [statusValue, setStatusValue] = useState(incident.status);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
 
   const isP1 = incident.priority === 'P1';
   const isClosed = incident.status === 'CLOSED';
@@ -108,6 +113,11 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    if (newStatus === 'CLOSED') {
+      setIsCloseModalOpen(true);
+      return;
+    }
+
     setStatusValue(newStatus);
     setUpdatingStatus(true);
 
@@ -230,6 +240,24 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
           </div>
         )}
 
+        {/* Incident Closure Issue Tags */}
+        {incident.closeTags && (
+          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+            <span className="text-[9px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1">
+              <Tag className="w-3 h-3 text-purple-400" />
+            </span>
+            {incident.closeTags.split(',').map((t) => t.trim()).filter(Boolean).map((tag, i) => (
+              <span
+                key={i}
+                className="px-2 py-0.5 text-[9px] font-extrabold bg-purple-500/20 text-purple-200 border border-purple-500/40 rounded-full flex items-center gap-1"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Cumulative Short AI Summary Box */}
         <div className="bg-blue-950/40 p-3 rounded-xl border border-blue-900/60 space-y-1">
           <div className="flex items-center space-x-1.5 text-[10px] font-bold text-yellow-400 uppercase tracking-wider">
@@ -304,6 +332,23 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
           </Link>
         </div>
       </div>
+
+      {/* Close Incident Modal */}
+      <CloseIncidentModal
+        isOpen={isCloseModalOpen}
+        onClose={() => {
+          setIsCloseModalOpen(false);
+          setStatusValue(incident.status);
+        }}
+        incidentId={incident.id}
+        incidentNumber={incident.number}
+        currentStatus={incident.status}
+        initialTags={incident.closeTags || ''}
+        initialNotes={incident.closeNotes || ''}
+        onSuccess={() => {
+          onIncidentUpdated();
+        }}
+      />
     </div>
   );
 };

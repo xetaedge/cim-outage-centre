@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const assignmentGroup = searchParams.get('assignmentGroup');
     const keyword = searchParams.get('keyword');
     const cti = searchParams.get('cti');
+    const tag = searchParams.get('tag') || searchParams.get('closeTag');
     const siteId = searchParams.get('siteId');
     const cmdbCi = searchParams.get('cmdbCi');
 
@@ -44,6 +45,12 @@ export async function GET(request: Request) {
 
     if (cmdbCi) {
       andConditions.push({ cmdbCi });
+    }
+
+    if (tag) {
+      andConditions.push({
+        closeTags: { contains: tag, mode: 'insensitive' },
+      });
     }
 
     if (keyword) {
@@ -120,6 +127,8 @@ export async function GET(request: Request) {
         'ETTR (min)': inc.ettrMinutes,
         'Sites': inc.sites.map(s => s.site.name).join(', '),
         'Total Outage Duration': inc.totalOutageDuration || '',
+        'Closure Tag(s)': inc.closeTags || '',
+        'Close Notes': inc.closeNotes || '',
       };
     });
 
