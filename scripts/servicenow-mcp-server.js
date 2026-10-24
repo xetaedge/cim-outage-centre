@@ -23,7 +23,7 @@ const http = require('http');
 const { URL } = require('url');
 
 // Helper to safely load environment files without third-party dependencies
-function loadEnvFile(relPath) {
+function loadEnvFile(relPath, forceOverride = false) {
   try {
     const fullPath = path.resolve(process.cwd(), relPath);
     if (!fs.existsSync(fullPath)) return;
@@ -38,7 +38,7 @@ function loadEnvFile(relPath) {
         if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
           v = v.slice(1, -1);
         }
-        if (!process.env[k]) {
+        if (forceOverride || !process.env[k]) {
           process.env[k] = v;
         }
       }
@@ -52,17 +52,20 @@ loadEnvFile('.env');
 let prismaClient = null;
 let cachedConfig = null;
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 10000; // 10 seconds cache to be responsive to Admin UI changes
+const CACHE_TTL_MS = 5000; // 5 seconds cache to be immediately responsive to Admin UI changes
 
 /**
  * Centrally resolves ServiceNow credentials from SystemSetting table (as saved in Admin UI),
- * with fallbacks to environment variables and default developer instance.
+ * with fallbacks to environment variables.
  */
 async function getServiceNowConfig(forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && cachedConfig && (now - lastFetchTime < CACHE_TTL_MS)) {
     return cachedConfig;
   }
+
+  // Refresh env files in case Admin UI updated them on disk
+  loadEnvFile('.env.local', true);
 
   let dbUrl = null;
   let dbUser = null;
@@ -86,9 +89,9 @@ async function getServiceNowConfig(forceRefresh = false) {
     });
 
     for (const s of settings) {
-      if (s.key === 'SERVICENOW_INSTANCE_URL' || s.key === 'servicenow_url') dbUrl = s.value;
-      if (s.key === 'SERVICENOW_USERNAME' || s.key === 'servicenow_user') dbUser = s.value;
-      if (s.key === 'SERVICENOW_PASSWORD' || s.key === 'servicenow_password') dbPass = s.value;
+      if ((s.key === 'SERVICENOW_INSTANCE_URL' || s.key === 'servicenow_url') && s.value) dbUrl = s.value;
+      if ((s.key === 'SERVICENOW_USERNAME' || s.key === 'servicenow_user') && s.value) dbUser = s.value;
+      if ((s.key === 'SERVICENOW_PASSWORD' || s.key === 'servicenow_password') && s.value) dbPass = s.value;
     }
   } catch (err) {
     // Database query failed or Prisma not configured, fallback to environment
@@ -97,11 +100,11 @@ async function getServiceNowConfig(forceRefresh = false) {
   const instanceUrl = (
     dbUrl ||
     process.env.SERVICENOW_INSTANCE_URL ||
-    'https://dev403781.service-now.com'
-  ).replace(/\/$/, '');
+    ''
+  ).trim().replace(/\/$/, '');
 
-  const username = dbUser || process.env.SERVICENOW_USERNAME || 'admin';
-  const password = dbPass || process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=';
+  const username = (dbUser || process.env.SERVICENOW_USERNAME || '').trim();
+  const password = (dbPass || process.env.SERVICENOW_PASSWORD || '').trim();
 
   cachedConfig = {
     instanceUrl,
@@ -115,13 +118,13 @@ async function getServiceNowConfig(forceRefresh = false) {
 // Fallback synchronous config snapshot for compatibility
 const CONFIG = {
   get instanceUrl() {
-    return cachedConfig?.instanceUrl || (process.env.SERVICENOW_INSTANCE_URL || 'https://dev403781.service-now.com').replace(/\/$/, '');
+    return (cachedConfig?.instanceUrl || process.env.SERVICENOW_INSTANCE_URL || '').replace(/\/$/, '');
   },
   get username() {
-    return cachedConfig?.username || process.env.SERVICENOW_USERNAME || 'admin';
+    return cachedConfig?.username || process.env.SERVICENOW_USERNAME || '';
   },
   get password() {
-    return cachedConfig?.password || process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=';
+    return cachedConfig?.password || process.env.SERVICENOW_PASSWORD || '';
   },
 };
 

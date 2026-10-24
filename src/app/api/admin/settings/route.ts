@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { syncServiceNowGlobally } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const settingsMap: Record<string, string> = {};
 
     // Support list array format e.g. { settings: [{ key: 'X', value: 'Y' }] }
     if (body && Array.isArray(body.settings)) {
@@ -58,6 +60,7 @@ export async function POST(request: Request) {
               val = 'gemini-flash-lite-latest';
             }
           }
+          settingsMap[item.key] = val;
           await prisma.systemSetting.upsert({
             where: { key: item.key },
             update: { value: val },
@@ -75,11 +78,25 @@ export async function POST(request: Request) {
             val = 'gemini-flash-lite-latest';
           }
         }
+        settingsMap[key] = val;
         await prisma.systemSetting.upsert({
           where: { key },
           update: { value: val },
           create: { key, value: val },
         });
+      }
+    }
+
+    // Plug & Play Global Synchronization for ServiceNow
+    if (settingsMap['SERVICENOW_INSTANCE_URL']) {
+      try {
+        await syncServiceNowGlobally({
+          instanceUrl: settingsMap['SERVICENOW_INSTANCE_URL'],
+          username: settingsMap['SERVICENOW_USERNAME'] || '',
+          password: settingsMap['SERVICENOW_PASSWORD'] || '',
+        });
+      } catch (snSyncErr) {
+        console.warn('[Admin Settings] Non-fatal ServiceNow global sync error:', snSyncErr);
       }
     }
 
@@ -89,11 +106,11 @@ export async function POST(request: Request) {
         userName: 'Admin',
         userRole: 'ADMIN',
         action: 'SYSTEM_SETTINGS_UPDATED',
-        details: 'Updated integration configurations (ServiceNow, OpenAI, Teams, AI models).',
+        details: 'Updated integration configurations (ServiceNow, AI models, Teams, Notifications).',
       },
-    });
+    }).catch(() => {});
 
-    return NextResponse.json({ success: true, message: 'Settings saved successfully.' });
+    return NextResponse.json({ success: true, message: 'Settings saved and synchronized globally.' });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
