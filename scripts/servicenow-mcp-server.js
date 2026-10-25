@@ -421,6 +421,10 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
+        change_number: {
+          type: 'string',
+          description: 'Optional specific change request number (e.g. "CHG0000013") to retrieve full details for a single record.',
+        },
         limit: {
           type: 'number',
           description: 'Number of change requests to retrieve (default 10).',
@@ -721,6 +725,60 @@ async function executeTool(name, args = {}) {
     }
 
     case 'servicenow_get_change_requests': {
+      const changeNum = (args.change_number || args.number || '').trim().toUpperCase();
+
+      if (changeNum) {
+        const endpoint = `/api/now/table/change_request?sysparm_query=number=${encodeURIComponent(changeNum)}&sysparm_display_value=true&sysparm_limit=1`;
+        const res = await fetchServiceNow(endpoint);
+
+        if (res.status !== 200) {
+          return {
+            content: [{ type: 'text', text: `❌ Failed to fetch Change Request ${changeNum}: ${res.error}` }],
+            isError: true,
+          };
+        }
+
+        const items = res.data?.result || [];
+        if (items.length === 0) {
+          return {
+            content: [{ type: 'text', text: `No Change Request found matching "${changeNum}" in ServiceNow.` }],
+          };
+        }
+
+        const chg = items[0];
+        const num = chg.number?.display_value || chg.number;
+        const shortDesc = chg.short_description?.display_value || chg.short_description || '—';
+        const desc = chg.description?.display_value || chg.description || 'No detailed description provided.';
+        const state = chg.state?.display_value || chg.state || '—';
+        const type = chg.type?.display_value || chg.type || 'Normal';
+        const risk = chg.risk?.display_value || chg.risk || '—';
+        const priority = chg.priority?.display_value || chg.priority || '—';
+        const ci = chg.cmdb_ci?.display_value || chg.cmdb_ci || 'None';
+        const assignedTo = chg.assigned_to?.display_value || chg.assigned_to || 'Unassigned';
+        const requestedBy = chg.requested_by?.display_value || chg.requested_by || 'Unspecified';
+        const startDate = chg.start_date?.display_value || chg.start_date || 'Not specified';
+        const endDate = chg.end_date?.display_value || chg.end_date || 'Not specified';
+        const workStart = chg.work_start?.display_value || chg.work_start || 'Not started';
+        const workEnd = chg.work_end?.display_value || chg.work_end || 'Pending / In progress';
+        const createdOn = chg.sys_created_on?.display_value || chg.sys_created_on || '—';
+        const updatedOn = chg.sys_updated_on?.display_value || chg.sys_updated_on || '—';
+
+        const lines = [
+          `### 🔄 ServiceNow Change Request: **${num}**`,
+          `- **Short Description**: ${shortDesc}`,
+          `- **Description**: ${desc}`,
+          `- **State**: **${state}**`,
+          `- **Type**: ${type} | **Risk**: **${risk}** | **Priority**: ${priority}`,
+          `- **Configuration Item (CI)**: **${ci}**`,
+          `- **Assigned To**: **${assignedTo}** | **Requested By**: ${requestedBy}`,
+          `- **📅 Planned Implementation Window**: \`${startDate}\` → \`${endDate}\``,
+          `- **⏱️ Actual Execution**: Work Start: \`${workStart}\` | Work End: \`${workEnd}\``,
+          `- **Audit Timestamps**: Record Created: \`${createdOn}\` | Last Updated: \`${updatedOn}\``,
+        ];
+
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
+      }
+
       const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 30);
       const queryParts = ['ORDERBYDESCsys_created_on'];
       if (args.state) queryParts.unshift(`state=${encodeURIComponent(args.state)}`);
