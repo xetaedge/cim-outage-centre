@@ -45,7 +45,7 @@ export default function AdminSettingsPage() {
 
   const [snUrl, setSnUrl] = useState('https://dev403781.service-now.com');
   const [snUser, setSnUser] = useState('admin');
-  const [snPassword, setSnPassword] = useState('VK0oo6l+YbZ=');
+  const [snPassword, setSnPassword] = useState('');
   const [teamsWebhook, setTeamsWebhook] = useState('https://outlook.office.com/webhook/cim-incidents');
 
   // Navigation Tab State
@@ -1670,7 +1670,7 @@ export default function AdminSettingsPage() {
               </label>
               <input
                 type="text"
-                placeholder="AQ.Ab8RN6..."
+                placeholder="Your Gemini API key"
                 value={aiKey}
                 onChange={(e) => setAiKey(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-yellow-500"

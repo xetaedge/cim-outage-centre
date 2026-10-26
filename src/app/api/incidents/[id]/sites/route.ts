@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 // GET: Return current linked sites for this incident
 export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
 
@@ -33,6 +37,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
 // POST: Add a location to this incident
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const body = await request.json();
@@ -119,6 +126,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
 // DELETE: Remove a location from this incident
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const { searchParams } = new URL(request.url);

@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
 
@@ -35,6 +39,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const body = await request.json();
@@ -117,6 +124,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
 

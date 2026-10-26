@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { getTeamsCredentials } from '@/lib/teams';
 import { signToken, UserRole } from '@/lib/auth';
@@ -10,15 +11,17 @@ export async function GET(request: Request) {
   const code = url.searchParams.get('code');
   const error = url.searchParams.get('error');
   const errorDescription = url.searchParams.get('error_description');
+  // Must match the state cookie set by /api/auth/sso/login, otherwise the code was not requested by this browser.
+  const stateMatches = !!url.searchParams.get('state') && url.searchParams.get('state') === cookies().get('sso_state')?.value;
 
   const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || url.host;
   const proto = request.headers.get('x-forwarded-proto') || (url.protocol.replace(':', '')) || 'http';
   const baseUrl = `${proto}://${host}`;
 
-  if (error || !code) {
+  if (error || !code || !stateMatches) {
     console.error('[SSO Callback Error]', error, errorDescription);
     return NextResponse.redirect(
-      `${baseUrl}/login?error=${encodeURIComponent(errorDescription || error || 'SSO authentication failed')}`
+      `${baseUrl}/login?error=${encodeURIComponent(errorDescription || error || (code ? 'SSO session expired, please try again' : 'SSO authentication failed'))}`
     );
   }
 

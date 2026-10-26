@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
 
@@ -26,6 +27,9 @@ function mapServiceNowState(s: any): string | null {
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
 

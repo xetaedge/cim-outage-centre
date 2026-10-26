@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,9 @@ function getIsoWeek(date: Date) {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get('dateFrom');

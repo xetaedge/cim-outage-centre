@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
+import { requireSession, SECRET_MASK } from '@/lib/auth';
 import { getGeminiConfig } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(request.url);
-    const keyOverride = searchParams.get('apiKey');
+    const keyOverride = searchParams.get('apiKey') === SECRET_MASK ? null : searchParams.get('apiKey');
     const config = await getGeminiConfig();
     const apiKey = (keyOverride || config.apiKey || '').trim();
 

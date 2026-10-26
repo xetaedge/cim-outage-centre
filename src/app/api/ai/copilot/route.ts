@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getGeminiConfig, callGeminiAPI } from '@/lib/gemini';
 import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
@@ -372,6 +373,9 @@ ${(item.text?.display_value || item.text || 'No article body content available.'
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const { prompt, history } = body as {

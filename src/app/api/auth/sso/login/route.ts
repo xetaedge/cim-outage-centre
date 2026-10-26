@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const state = Math.random().toString(36).substring(2, 15);
+    const state = crypto.randomUUID();
     const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${encodeURIComponent(
       clientId
     )}&response_type=code&redirect_uri=${encodeURIComponent(

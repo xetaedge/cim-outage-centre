@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,9 @@ function formatDate(d: Date | string | null | undefined): string {
 }
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(request.url);
   const rcaDataParam = searchParams.get('rcaData');
   let passedRca: any = null;
@@ -59,6 +63,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   let passedRca: any = null;
   try {
     const body = await request.json();

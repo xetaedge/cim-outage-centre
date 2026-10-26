@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim();
@@ -52,6 +56,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { name, email, password, role = 'GUEST' } = await request.json();
 

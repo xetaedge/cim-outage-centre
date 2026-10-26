@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
+import { requireSession, stripMasked } from '@/lib/auth';
 import { getEmailConfig, getGraphToken } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   const steps: { step: string; status: 'ok' | 'error' | 'pending'; details?: string }[] = [];
 
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = stripMasked(await request.json().catch(() => ({})));
     const testRecipient = (body.recipient || 'shivam@xetainteractives.com').trim();
 
     // Step 1: Configuration check with request overrides

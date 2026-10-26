@@ -1,61 +1,16 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { verifyToken, signToken, UserSession } from '@/lib/auth';
+import { getSession, signToken, UserSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
-  const cookieStore = cookies();
-  const token = cookieStore.get('cim_token')?.value;
-
-  if (!token) {
-    return NextResponse.json({
-      authenticated: false,
-      user: null,
-    });
-  }
-
-  const session = verifyToken(token);
-  if (!session) {
-    return NextResponse.json({
-      authenticated: false,
-      user: null,
-    });
-  }
-
-  // Fetch latest user details including timeZone from database
-  let timeZone = session.timeZone || 'UTC';
-  try {
-    const dbUser = await (prisma.user as any).findUnique({
-      where: { id: session.id },
-      select: { timeZone: true, name: true, role: true },
-    });
-    if (dbUser?.timeZone) {
-      timeZone = dbUser.timeZone;
-    }
-  } catch (err) {
-    // Schema may not have timeZone column yet in local test
-  }
-
-  return NextResponse.json({
-    authenticated: true,
-    user: {
-      ...session,
-      timeZone,
-    },
-  });
+  const session = await getSession();
+  return NextResponse.json({ authenticated: !!session, user: session });
 }
 
 export async function PUT(request: Request) {
-  const cookieStore = cookies();
-  const token = cookieStore.get('cim_token')?.value;
-
-  if (!token) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const session = verifyToken(token);
+  const session = await getSession();
   if (!session) {
-    return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 });
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
   try {

@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
+import { requireSession, SECRET_MASK } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { syncServiceNowGlobally } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
 
+const SECRET_KEY = /PASSWORD|SECRET|API_KEY|TOKEN/i;
+
 export async function GET() {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const settings = await prisma.systemSetting.findMany();
     const settingsMap: Record<string, string> = {};
@@ -39,6 +45,11 @@ export async function GET() {
       }).catch(() => {});
     }
 
+    // Secrets never leave the server; the admin UI shows the mask and echoes it back when unchanged.
+    for (const key of Object.keys(settingsMap)) {
+      if (SECRET_KEY.test(key) && settingsMap[key]) settingsMap[key] = SECRET_MASK;
+    }
+
     return NextResponse.json({ success: true, settings: settingsMap });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -46,6 +57,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const settingsMap: Record<string, string> = {};
@@ -53,7 +67,7 @@ export async function POST(request: Request) {
     // Support list array format e.g. { settings: [{ key: 'X', value: 'Y' }] }
     if (body && Array.isArray(body.settings)) {
       for (const item of body.settings) {
-        if (item && item.key) {
+        if (item && item.key && item.value !== SECRET_MASK) {
           let val = String(item.value);
           if (item.key === 'AI_MODEL' || item.key === 'AI_SUMMARY_MODEL') {
             if (val.startsWith('gpt-') || val.includes('openai') || !val.startsWith('gemini-')) {
@@ -72,6 +86,7 @@ export async function POST(request: Request) {
     // Support dictionary format e.g. { 'X': 'Y' }
     else if (body && typeof body === 'object') {
       for (const [key, value] of Object.entries(body)) {
+        if (value === SECRET_MASK) continue;
         let val = String(value);
         if (key === 'AI_MODEL' || key === 'AI_SUMMARY_MODEL') {
           if (val.startsWith('gpt-') || val.includes('openai') || !val.startsWith('gemini-')) {

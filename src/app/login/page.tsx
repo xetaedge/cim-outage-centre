@@ -193,7 +193,8 @@ function LoginFormContent() {
             </button>
           </form>
 
-          {/* Quick Demo Credentials Preset */}
+          {/* Quick Demo Credentials Preset (local dev only: never advertise seeded passwords in production) */}
+          {process.env.NODE_ENV !== 'production' && (
           <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
               <span>Quick Demo Accounts</span>
@@ -223,6 +224,7 @@ function LoginFormContent() {
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

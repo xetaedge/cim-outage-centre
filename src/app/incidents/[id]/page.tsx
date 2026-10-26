@@ -2828,18 +2828,20 @@ export default function IncidentDetailsPage() {
                 >
                   Skip / Don&apos;t Send
                 </button>
-                <button
-                  onClick={handleSendEmail}
-                  disabled={sendingEmail}
-                  className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50"
-                >
-                  {sendingEmail ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  {sendingEmail ? 'Sending...' : 'Send Email Now'}
-                </button>
+                {currentRole !== 'GUEST' && (
+                  <button
+                    onClick={handleSendEmail}
+                    disabled={sendingEmail}
+                    className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50"
+                  >
+                    {sendingEmail ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    {sendingEmail ? 'Sending...' : 'Send Email Now'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -3022,12 +3024,14 @@ export default function IncidentDetailsPage() {
                           <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
                           <span><strong>Immediate Option:</strong> You can click <strong>&quot;Edit / Paste Notes&quot;</strong> below or use the Webhook to add notes directly!</span>
                         </span>
-                        <button
-                          onClick={() => setIsEditingNotes(true)}
-                          className="px-2.5 py-1 text-[10px] font-bold bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 rounded-lg text-teal-200"
-                        >
-                          Paste Notes Now
-                        </button>
+                        {currentRole !== 'GUEST' && (
+                          <button
+                            onClick={() => setIsEditingNotes(true)}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 rounded-lg text-teal-200"
+                          >
+                            Paste Notes Now
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3057,13 +3061,15 @@ export default function IncidentDetailsPage() {
                           <RefreshCw className={`w-3 h-3 ${loadingWhisper ? 'animate-spin text-teal-400' : ''}`} />
                           <span>Sync from Teams</span>
                         </button>
-                        <button
-                          onClick={() => setIsEditingNotes(!isEditingNotes)}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg flex items-center gap-1 transition-all"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                          <span>{isEditingNotes ? 'View Stream' : 'Edit / Paste Notes'}</span>
-                        </button>
+                        {currentRole !== 'GUEST' && (
+                          <button
+                            onClick={() => setIsEditingNotes(!isEditingNotes)}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg flex items-center gap-1 transition-all"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>{isEditingNotes ? 'View Stream' : 'Edit / Paste Notes'}</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -3124,18 +3130,20 @@ export default function IncidentDetailsPage() {
                     <p className="text-[11px] text-slate-400">
                       Use Gemini AI to analyze the live notes and extract an executive ITSM incident update.
                     </p>
-                    <button
-                      onClick={handleGenerateWhisperSuggest}
-                      disabled={loadingWhisperSuggest}
-                      className="px-4 py-2 text-xs font-bold bg-gradient-to-r from-teal-600 via-cyan-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
-                    >
-                      {loadingWhisperSuggest ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-4 h-4 text-yellow-300" />
-                      )}
-                      <span>{loadingWhisperSuggest ? 'Synthesizing...' : 'Suggest Latest Update Summary'}</span>
-                    </button>
+                    {currentRole !== 'GUEST' && (
+                      <button
+                        onClick={handleGenerateWhisperSuggest}
+                        disabled={loadingWhisperSuggest}
+                        className="px-4 py-2 text-xs font-bold bg-gradient-to-r from-teal-600 via-cyan-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
+                      >
+                        {loadingWhisperSuggest ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4 text-yellow-300" />
+                        )}
+                        <span>{loadingWhisperSuggest ? 'Synthesizing...' : 'Suggest Latest Update Summary'}</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* ── AI Suggested Update Card ── */}
@@ -3296,14 +3304,16 @@ export default function IncidentDetailsPage() {
                   </div>
 
                   <div className="pt-2 flex justify-end gap-3 border-t border-slate-800">
-                    <button
-                      onClick={handleSaveFullTranscription}
-                      disabled={savingTranscript || !fullTranscriptInput.trim()}
-                      className="px-5 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
-                    >
-                      {savingTranscript ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      <span>{savingTranscript ? 'Archiving...' : 'Save Full Transcription to Records'}</span>
-                    </button>
+                    {currentRole !== 'GUEST' && (
+                      <button
+                        onClick={handleSaveFullTranscription}
+                        disabled={savingTranscript || !fullTranscriptInput.trim()}
+                        className="px-5 py-2 text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white rounded-xl flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
+                      >
+                        {savingTranscript ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        <span>{savingTranscript ? 'Archiving...' : 'Save Full Transcription to Records'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

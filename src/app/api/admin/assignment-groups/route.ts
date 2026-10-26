@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // GET all assignment groups
 export async function GET() {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const groups = await prisma.assignmentGroup.findMany({
       orderBy: { name: 'asc' },
@@ -15,6 +19,9 @@ export async function GET() {
 
 // POST create or upsert an assignment group
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { name, email } = await request.json();
     if (!name || !email) {

@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getAssignmentGroupEmail, getSiteEmails } from '@/lib/email';
 import { buildCimUpdateEmail } from '@/templates/cimUpdateEmailTemplate';
 
 export const dynamic = 'force-dynamic';
 
+// Every field lands in an HTML email body, so escape it to stop injected markup or links.
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
 export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const incident = await prisma.incident.findFirst({
@@ -80,6 +89,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const payload = await request.json();
 
@@ -117,29 +129,29 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     // Convert the bullet array back to HTML list
     const bulletArray: string[] = Array.isArray(resolutionBullets) ? resolutionBullets : ['Investigating'];
-    const resolutionStatus = `<ul>${bulletArray.map((b: string) => `<li>${b}</li>`).join('')}</ul>`;
+    const resolutionStatus = `<ul>${bulletArray.map((b: string) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`;
 
     const html = buildCimUpdateEmail({
-      updateSequence: updateSequence || '1',
-      incidentNumber,
-      startDate: startDate || '',
-      startTime: startTime || '',
-      priority: priority || 'P1',
-      incidentManager: incidentManager || 'Unassigned',
-      nextUpdate: nextUpdate || 'N/A',
-      businessImpact: businessImpact || 'Under Evaluation',
-      sitesImpacted: sitesImpacted || 'Global',
-      outageDuration: outageDuration || 'N/A',
-      assignmentGroup: assignmentGroup || 'General',
-      relatedIncidents: relatedIncidents || 'None',
-      issueSummary: issueSummary || '',
+      updateSequence: escapeHtml(updateSequence || '1'),
+      incidentNumber: escapeHtml(incidentNumber),
+      startDate: escapeHtml(startDate || ''),
+      startTime: escapeHtml(startTime || ''),
+      priority: escapeHtml(priority || 'P1'),
+      incidentManager: escapeHtml(incidentManager || 'Unassigned'),
+      nextUpdate: escapeHtml(nextUpdate || 'N/A'),
+      businessImpact: escapeHtml(businessImpact || 'Under Evaluation'),
+      sitesImpacted: escapeHtml(sitesImpacted || 'Global'),
+      outageDuration: escapeHtml(outageDuration || 'N/A'),
+      assignmentGroup: escapeHtml(assignmentGroup || 'General'),
+      relatedIncidents: escapeHtml(relatedIncidents || 'None'),
+      issueSummary: escapeHtml(issueSummary || ''),
       resolutionStatus,
-      overallStatus: overallStatus || '',
-      teamsInvolved: teamsInvolved || 'N/A',
-      partnerLead: partnerLead || 'N/A',
-      itCoordinator: itCoordinator || 'N/A',
-      stakeholders: stakeholders || 'N/A',
-      teamsLink: teamsLink || '#',
+      overallStatus: escapeHtml(overallStatus || ''),
+      teamsInvolved: escapeHtml(teamsInvolved || 'N/A'),
+      partnerLead: escapeHtml(partnerLead || 'N/A'),
+      itCoordinator: escapeHtml(itCoordinator || 'N/A'),
+      stakeholders: escapeHtml(stakeholders || 'N/A'),
+      teamsLink: /^https:\/\//i.test(teamsLink || '') ? escapeHtml(teamsLink) : '#',
     });
 
     const result = await sendEmail('CIM_UPDATE_RECIPIENTS', subject, html, extraEmails);

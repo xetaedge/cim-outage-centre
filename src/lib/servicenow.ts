@@ -91,9 +91,12 @@ export async function getServiceNowConfig(
   const envPass = process.env.SERVICENOW_PASSWORD?.trim();
 
   // Priority: override > DB > process.env
-  const instanceUrl = (overrideUrl || dbUrl || envUrl || '').replace(/\/$/, '');
-  const username = overrideUser || dbUser || envUser || '';
-  const password = overridePass || dbPass || envPass || '';
+  const storedUrl = (dbUrl || envUrl || '').replace(/\/$/, '');
+  const instanceUrl = (overrideUrl || storedUrl).replace(/\/$/, '');
+  // Stored credentials are only ever sent to the stored instance; a different URL must bring its own.
+  const useStored = instanceUrl === storedUrl;
+  const username = overrideUser || (useStored ? dbUser || envUser || '' : '');
+  const password = overridePass || (useStored ? dbPass || envPass || '' : '');
 
   if (!instanceUrl) {
     throw new Error(
@@ -433,6 +436,7 @@ export async function syncServiceNowGlobally(config: {
   if (password) process.env.SERVICENOW_PASSWORD = password;
 
   // 2. Persist in Database SystemSetting table
+  // An empty password means "unchanged" (the admin UI only ever sees it masked), so keep the stored one.
   await prisma.$transaction([
     prisma.systemSetting.upsert({
       where: { key: 'SERVICENOW_INSTANCE_URL' },
@@ -444,11 +448,15 @@ export async function syncServiceNowGlobally(config: {
       update: { value: username },
       create: { key: 'SERVICENOW_USERNAME', value: username },
     }),
-    prisma.systemSetting.upsert({
-      where: { key: 'SERVICENOW_PASSWORD' },
-      update: { value: password },
-      create: { key: 'SERVICENOW_PASSWORD', value: password },
-    }),
+    ...(password
+      ? [
+          prisma.systemSetting.upsert({
+            where: { key: 'SERVICENOW_PASSWORD' },
+            update: { value: password },
+            create: { key: 'SERVICENOW_PASSWORD', value: password },
+          }),
+        ]
+      : []),
   ]);
 
   // 3. Update .env.local and .env files on disk
@@ -477,7 +485,9 @@ export async function syncServiceNowGlobally(config: {
         }
 
         // Replace or append SERVICENOW_PASSWORD
-        if (/^SERVICENOW_PASSWORD=.*$/m.test(content)) {
+        if (!password) {
+          // Unchanged: leave the existing line alone
+        } else if (/^SERVICENOW_PASSWORD=.*$/m.test(content)) {
           content = content.replace(/^SERVICENOW_PASSWORD=.*$/m, `SERVICENOW_PASSWORD="${password}"`);
         } else {
           content += `\nSERVICENOW_PASSWORD="${password}"`;
@@ -507,9 +517,9 @@ export async function syncServiceNowGlobally(config: {
         }
         mcpJson.mcpServers.servicenow.env.SERVICENOW_INSTANCE_URL = instanceUrl;
         mcpJson.mcpServers.servicenow.env.SERVICENOW_USERNAME = username;
-        if (password) {
-          mcpJson.mcpServers.servicenow.env.SERVICENOW_PASSWORD = password;
-        }
+        // mcp_config.json is committed to git, so never store the password there;
+        // the MCP script reads it from .env.local or the database instead.
+        delete mcpJson.mcpServers.servicenow.env.SERVICENOW_PASSWORD;
 
         fs.writeFileSync(mcpPath, JSON.stringify(mcpJson, null, 2), 'utf8');
         mcpConfigUpdated = true;

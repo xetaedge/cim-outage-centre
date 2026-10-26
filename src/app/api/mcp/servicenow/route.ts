@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
@@ -284,7 +285,8 @@ async function handleToolExecution(name: string, args: any = {}) {
     }
 
     case 'servicenow_fetch_table_records': {
-      if (!args.table_name) throw new Error('table_name is required');
+      // Plain table names only, so the value can't walk to other REST paths.
+      if (!/^[a-z0-9_]+$/i.test(String(args.table_name || ''))) throw new Error('table_name is required and must be a plain table name');
       const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 50);
       const queryParam = args.query ? `sysparm_query=${encodeURIComponent(args.query)}&` : '';
       const res = await fetchServiceNowAPI(`/api/now/table/${args.table_name}?${queryParam}sysparm_limit=${limit}&sysparm_display_value=true`);
@@ -327,6 +329,9 @@ async function handleToolExecution(name: string, args: any = {}) {
 }
 
 export async function GET() {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   return NextResponse.json({
     name: 'servicenow-mcp-server',
     version: '1.0.0',
@@ -337,6 +342,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const { id = 1, method, params } = body;

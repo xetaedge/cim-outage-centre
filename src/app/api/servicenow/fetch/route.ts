@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
 import { getTeamsCredentials, formatTeamsBridgeLink, sendTeamsBridgeNotification, sendInstantMeetingInvite } from '@/lib/teams';
@@ -33,6 +34,9 @@ function extractDisplayValue(field: any, defaultVal: string = 'Not Specified'): 
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { incidentNumber } = await request.json();
 

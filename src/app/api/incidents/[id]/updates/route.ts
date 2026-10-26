@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { generateAIIncidentInsights } from '@/lib/openai';
 import { getAssignmentGroupEmail, getSiteEmails } from '@/lib/email';
 import { fetchServiceNowAPI } from '@/lib/servicenow';
-import { verifyToken } from '@/lib/auth';
+import { requireSession } from '@/lib/auth';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const session = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (session instanceof NextResponse) return session;
+
   try {
     const { id } = params;
     const {
@@ -19,9 +21,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
       additionalInfo = '',
     } = await request.json();
 
-    const cookieStore = cookies();
-    const token = cookieStore.get('cim_token')?.value;
-    const session = token ? verifyToken(token) : null;
     const effectiveAuthorName = (authorName && authorName.trim()) || session?.name || 'Incident Manager';
 
     if (!comment) {

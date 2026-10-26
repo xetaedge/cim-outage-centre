@@ -21,16 +21,16 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Invalid credentials. User not found.' },
+        { success: false, error: 'Invalid email or password.' },
         { status: 401 }
       );
     }
 
-    // Check password
+    // Check password (bcrypt only; SSO accounts hold a non-bcrypt placeholder that can never match)
     const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch && user.passwordHash !== password) {
+    if (!isMatch) {
       return NextResponse.json(
-        { success: false, error: 'Invalid password. Please check your credentials.' },
+        { success: false, error: 'Invalid email or password.' },
         { status: 401 }
       );
     }

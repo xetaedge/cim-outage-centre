@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { callGeminiAPI } from '@/lib/gemini';
 
@@ -20,6 +21,9 @@ function extractKeywords(text: string): string[] {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   const startTimer = Date.now();
   try {
     const { searchParams } = new URL(request.url);
