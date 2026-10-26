@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
+import { requireSession, stripMasked } from '@/lib/auth';
 import { getTeamsCredentials } from '@/lib/teams';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = stripMasked(await request.json().catch(() => ({})));
     const saved = await getTeamsCredentials();
 
     const appName = body.appName || saved.appName || 'Graph Java quick start';

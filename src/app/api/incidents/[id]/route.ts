@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { getAssignmentGroupEmail } from '@/lib/email';
-import { verifyToken } from '@/lib/auth';
+import { requireSession } from '@/lib/auth';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const session = await requireSession();
+  if (session instanceof NextResponse) return session;
+
   try {
     const { id } = params;
 
-    const cookieStore = cookies();
-    const token = cookieStore.get('cim_token')?.value;
-    const session = token ? verifyToken(token) : null;
     const isGuest = session?.role === 'GUEST';
 
     const incident = await prisma.incident.findFirst({
@@ -61,6 +60,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const session = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (session instanceof NextResponse) return session;
+
   try {
     const { id } = params;
     const body = await request.json();
@@ -186,6 +188,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const session = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (session instanceof NextResponse) return session;
+
   try {
     const { id } = params;
 

@@ -31,7 +31,7 @@ async function main() {
     data: [
       { key: 'SERVICENOW_INSTANCE_URL', value: 'https://dev403781.service-now.com', encrypted: false },
       { key: 'SERVICENOW_USERNAME', value: 'admin', encrypted: false },
-      { key: 'SERVICENOW_PASSWORD', value: 'VK0oo6l+YbZ=', encrypted: true },
+      { key: 'SERVICENOW_PASSWORD', value: process.env.SERVICENOW_PASSWORD || '', encrypted: true },
       { key: 'TEAMS_TENANT_ID', value: process.env.AZURE_TENANT_ID || '00550e88-11f9-4a42-b775-d0274f01576e', encrypted: false },
       { key: 'TEAMS_CLIENT_ID', value: process.env.AZURE_CLIENT_ID || 'bcb10dc2-3ef1-41f3-aa41-2f1cef152a7a', encrypted: false },
       { key: 'TEAMS_CLIENT_SECRET', value: process.env.AZURE_CLIENT_SECRET || '', encrypted: true },

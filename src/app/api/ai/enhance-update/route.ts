@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { callGeminiAPI } from '@/lib/gemini';
 
 export interface EnhancedUpdateOption {
@@ -9,6 +10,9 @@ export interface EnhancedUpdateOption {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { draftComment, incidentNumber, priority, assignmentGroup } = await request.json();
 

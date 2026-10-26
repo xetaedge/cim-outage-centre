@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { sendInstantMeetingInvite } from '@/lib/teams';
 import { resolveBridgeRecipients, sendEmail, getAssignmentGroupEmail, getSiteEmails } from '@/lib/email';
@@ -10,6 +11,9 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const incident = await prisma.incident.findFirst({
@@ -51,6 +55,9 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     let incident = await prisma.incident.findFirst({

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession, stripMasked } from '@/lib/auth';
 import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
@@ -43,13 +44,19 @@ async function testConnection(overrides?: { instanceUrl?: string; username?: str
 }
 
 export async function GET() {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   return testConnection();
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json().catch(() => ({}));
-    return testConnection(body);
+    return testConnection(stripMasked(body));
   } catch (err: any) {
     return testConnection();
   }

@@ -101,7 +101,7 @@ async function getServiceNowConfig(forceRefresh = false) {
   ).replace(/\/$/, '');
 
   const username = dbUser || process.env.SERVICENOW_USERNAME || 'admin';
-  const password = dbPass || process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=';
+  const password = dbPass || process.env.SERVICENOW_PASSWORD || '';
 
   cachedConfig = {
     instanceUrl,
@@ -121,7 +121,7 @@ const CONFIG = {
     return cachedConfig?.username || process.env.SERVICENOW_USERNAME || 'admin';
   },
   get password() {
-    return cachedConfig?.password || process.env.SERVICENOW_PASSWORD || 'VK0oo6l+YbZ=';
+    return cachedConfig?.password || process.env.SERVICENOW_PASSWORD || '';
   },
 };
 

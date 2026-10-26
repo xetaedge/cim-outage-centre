@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getGeminiConfig, callGeminiAPI } from '@/lib/gemini';
 import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
@@ -158,6 +159,9 @@ Close Notes: ${item.close_notes?.display_value || item.close_notes || 'None'}`,
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const { prompt, history } = body as {

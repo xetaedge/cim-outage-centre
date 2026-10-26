@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
+import { requireSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +8,9 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const session = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (session instanceof NextResponse) return session;
+
   try {
     const { id } = params;
     const body = await request.json().catch(() => ({}));
@@ -22,9 +24,6 @@ export async function POST(
       source = 'TEAMS_FACILITATOR',
     } = body;
 
-    const cookieStore = cookies();
-    const token = cookieStore.get('cim_token')?.value;
-    const session = token ? verifyToken(token) : null;
     const authorName = session?.name || 'Incident Manager';
 
     if (!transcriptText && !notes) {

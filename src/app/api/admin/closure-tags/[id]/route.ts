@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 // PUT update a closure tag by id
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const body = await request.json();
@@ -28,6 +32,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 // DELETE a closure tag by id
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     await prisma.closureTag.delete({ where: { id } });

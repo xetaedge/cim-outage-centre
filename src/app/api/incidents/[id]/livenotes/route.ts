@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateLiveAINotes } from '@/lib/openai';
 import { fetchTeamsMeetingTranscript } from '@/lib/teams';
@@ -7,6 +8,9 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const incident = await prisma.incident.findUnique({
       where: { id: params.id },

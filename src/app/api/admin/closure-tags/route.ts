@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const DEFAULT_CLOSURE_TAGS = [
@@ -54,6 +55,9 @@ export const DEFAULT_CLOSURE_TAGS = [
 
 // GET all closure tags (auto-seeds defaults if empty)
 export async function GET() {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     let tags = await prisma.closureTag.findMany({
       orderBy: [{ order: 'asc' }, { name: 'asc' }],
@@ -87,6 +91,9 @@ export async function GET() {
 
 // POST create tag or reset to defaults
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
 

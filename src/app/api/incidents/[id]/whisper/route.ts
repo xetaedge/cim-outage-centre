@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { fetchTeamsMeetingTranscriptDetails } from '@/lib/teams';
 
@@ -10,6 +11,9 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
 
@@ -108,6 +112,9 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = params;
     const body = await request.json();

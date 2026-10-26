@@ -51,7 +51,7 @@ async function main() {
     data: [
       { key: 'SERVICENOW_INSTANCE_URL', value: 'https://dev403781.service-now.com', encrypted: false },
       { key: 'SERVICENOW_USERNAME', value: 'admin', encrypted: false },
-      { key: 'SERVICENOW_PASSWORD', value: 'VK0oo6l+YbZ=', encrypted: true },
+      { key: 'SERVICENOW_PASSWORD', value: process.env.SERVICENOW_PASSWORD || '', encrypted: true },
       { key: 'TEAMS_WEBHOOK_URL', value: 'https://outlook.office.com/webhook/cim-incidents', encrypted: false },
       { key: 'GEMINI_API_KEY', value: process.env.GEMINI_API_KEY || '', encrypted: false },
       { key: 'AI_MODEL', value: 'gemini-flash-lite-latest', encrypted: false },
