@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireSession, SECRET_MASK } from '@/lib/auth';
 import {
+  getServiceNowConfig,
   getServiceNowConfigSource,
   syncServiceNowGlobally,
   testServiceNowConnection,
@@ -13,6 +15,9 @@ export const dynamic = 'force-dynamic';
  * Returns the currently active ServiceNow configuration and its source (DB / env / unconfigured).
  */
 export async function GET() {
+  const auth = await requireSession(['ADMIN', 'INCIDENT_MANAGER']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const source = await getServiceNowConfigSource();
     return NextResponse.json({
@@ -44,11 +49,21 @@ export async function GET() {
  * Then immediately runs a deep connection test and returns the diagnostic report.
  */
 export async function POST(request: Request) {
+  const auth = await requireSession(['ADMIN']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const instanceUrl = (body.instanceUrl || body.SERVICENOW_INSTANCE_URL || '').trim().replace(/\/$/, '');
     const username = (body.username || body.SERVICENOW_USERNAME || '').trim();
-    const password = (body.password || body.SERVICENOW_PASSWORD || '').trim();
+    let password = (body.password || body.SERVICENOW_PASSWORD || '').trim();
+
+    // Unchanged masked field: reuse the stored password (only released for the stored instance URL).
+    if (password === SECRET_MASK) {
+      password = await getServiceNowConfig({ instanceUrl, username })
+        .then((c) => c.password)
+        .catch(() => '');
+    }
 
     if (!instanceUrl || !username || !password) {
       return NextResponse.json(
@@ -63,8 +78,9 @@ export async function POST(request: Request) {
     // 2. Audit log
     await prisma.auditLog.create({
       data: {
-        userName: 'Admin',
-        userRole: 'ADMIN',
+        userId: auth.id,
+        userName: auth.name,
+        userRole: auth.role,
         action: 'SERVICENOW_SETTINGS_UPDATED',
         details: `ServiceNow instance updated globally to: ${instanceUrl}. Username: ${username}. Env & MCP synchronized.`,
       },

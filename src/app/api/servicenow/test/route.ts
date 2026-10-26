@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireSession, stripMasked } from '@/lib/auth';
-import { getServiceNowConfig, fetchServiceNowAPI } from '@/lib/servicenow';
+import { testServiceNowConnection, ServiceNowConfig } from '@/lib/servicenow';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +8,8 @@ export async function GET() {
   const auth = await requireSession(['ADMIN']);
   if (auth instanceof NextResponse) return auth;
 
-  return testConnection();
+  const result = await testServiceNowConnection();
+  return NextResponse.json(result, { status: result.success ? 200 : (result.statusCode || 500) });
 }
 
 export async function POST(request: Request) {
@@ -16,8 +17,14 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const body = await request.json().catch(() => ({}));
-    return testConnection(stripMasked(body));
+    const body = stripMasked(await request.json().catch(() => ({})));
+    const overrides: Partial<ServiceNowConfig> = {};
+    if (body.instanceUrl) overrides.instanceUrl = body.instanceUrl;
+    if (body.username) overrides.username = body.username;
+    if (body.password) overrides.password = body.password;
+
+    const result = await testServiceNowConnection(overrides);
+    return NextResponse.json(result, { status: result.success ? 200 : (result.statusCode || 500) });
   } catch (err: any) {
     return NextResponse.json({
       success: false,
