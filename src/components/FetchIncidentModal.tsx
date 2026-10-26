@@ -98,9 +98,23 @@ export const FetchIncidentModal: React.FC = () => {
     }
   };
 
+  const [activeInstanceHost, setActiveInstanceHost] = useState('ServiceNow Live');
+
   useEffect(() => {
     if (isFetchModalOpen) {
       loadSites();
+      fetch('/api/admin/settings/servicenow')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.instanceUrl) {
+            try {
+              setActiveInstanceHost(new URL(d.instanceUrl).hostname);
+            } catch {
+              setActiveInstanceHost(d.instanceUrl.replace(/^https?:\/\//, ''));
+            }
+          }
+        })
+        .catch(() => {});
     }
   }, [isFetchModalOpen]);
 
@@ -286,7 +300,7 @@ export const FetchIncidentModal: React.FC = () => {
               <div>
                 <h2 className="text-lg font-bold text-white">Import Live ServiceNow Incident</h2>
                 <p className="text-xs text-secondaryText">
-                  Query live ServiceNow REST API (dev403781) & map affected locations
+                  Query live ServiceNow REST API ({activeInstanceHost}) &amp; map affected locations
                 </p>
               </div>
             </div>
@@ -349,7 +363,7 @@ export const FetchIncidentModal: React.FC = () => {
                     Fetched Live ServiceNow Attributes
                   </span>
                   <span className="font-mono text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded">
-                    dev403781 Synchronized
+                    {activeInstanceHost} Synchronized
                   </span>
                 </div>
 

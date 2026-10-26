@@ -520,12 +520,14 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleTestServiceNow = async () => {
+  const handleSaveAndTestServiceNow = async () => {
     setTestingConnection(true);
     setTestResult(null);
+    setSavingSettings(true);
 
     try {
-      const res = await fetch('/api/servicenow/test', {
+      // Single atomic endpoint: saves credentials to DB then immediately tests the connection
+      const res = await fetch('/api/admin/settings/servicenow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -535,20 +537,41 @@ export default function AdminSettingsPage() {
         }),
       });
       const data = await res.json();
-      setTestResult(data);
-      if (data.success) {
-        addToast({
-          title: '✅ ServiceNow Connection Verified',
-          message: `Latency: ${data.latencyMs}ms | Endpoint: ${data.instanceUrl}`,
-          type: 'update',
+
+      if (data.saved) {
+        setTestResult({
+          success: data.testSuccess,
+          message: data.testMessage,
+          latencyMs: data.testLatency,
+          instanceUrl: data.instanceUrl,
         });
+
+        if (data.testSuccess) {
+          addToast({
+            title: '✅ ServiceNow Saved & Verified',
+            message: `Connected to ${data.instanceUrl} — Latency: ${data.testLatency}ms. All features updated globally.`,
+            type: 'update',
+          });
+        } else {
+          addToast({
+            title: '💾 Settings Saved (Connection Warning)',
+            message: data.testMessage,
+            type: 'error',
+          });
+        }
+      } else {
+        setTestResult({ success: false, message: data.error || 'Failed to save ServiceNow settings.' });
+        addToast({ title: '❌ Save Failed', message: data.error || 'Unknown error', type: 'error' });
       }
     } catch (err: any) {
-      setTestResult({ success: false, message: 'Network test failed: ' + (err.message || 'Unknown error') });
+      setTestResult({ success: false, message: 'Network error: ' + (err.message || 'Unknown error') });
     } finally {
       setTestingConnection(false);
+      setSavingSettings(false);
     }
   };
+
+  const handleTestServiceNow = handleSaveAndTestServiceNow;
 
   const handleTestOpenAI = async () => {
     setTestingAiConnection(true);
@@ -1482,11 +1505,21 @@ export default function AdminSettingsPage() {
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <Server className="w-5 h-5 text-blue-400" />
-              ServiceNow Integration Instance
+              ServiceNow Integration — Plug &amp; Play Config
             </h2>
-            <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
-              Connected
+            <span className="text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">
+              Global — All Features
             </span>
+          </div>
+
+          {/* Explainer */}
+          <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-xl text-[11px] text-blue-300 leading-relaxed">
+            <p className="font-bold mb-1">🔌 How this works:</p>
+            <p>
+              Changing the instance URL, username and password here updates the configuration <strong>globally</strong> — 
+              it instantly applies to AI Analysis, AI Copilot, Worknotes Sync, ServiceNow Fetch, Change Correlation, 
+              Knowledge Base lookups, and the MCP Tool Suite. No restart or code change required.
+            </p>
           </div>
 
           <div className="space-y-3 text-xs">
@@ -1496,7 +1529,8 @@ export default function AdminSettingsPage() {
                 type="text"
                 value={snUrl}
                 onChange={(e) => setSnUrl(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-accent"
+                placeholder="https://yourcompany.service-now.com"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
               />
             </div>
 
@@ -1506,7 +1540,8 @@ export default function AdminSettingsPage() {
                 type="text"
                 value={snUser}
                 onChange={(e) => setSnUser(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-accent"
+                placeholder="admin or svc_cim_centre"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
               />
             </div>
 
@@ -1516,7 +1551,8 @@ export default function AdminSettingsPage() {
                 type="password"
                 value={snPassword}
                 onChange={(e) => setSnPassword(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-accent"
+                placeholder="Enter password"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
               />
             </div>
           </div>
@@ -1531,30 +1567,29 @@ export default function AdminSettingsPage() {
             >
               <p className="font-bold">{testResult.message}</p>
               {testResult.latencyMs && (
-                <p className="text-[11px] font-mono opacity-80">Latency: {testResult.latencyMs}ms</p>
+                <p className="text-[11px] font-mono opacity-80">Latency: {testResult.latencyMs}ms | Instance: {testResult.instanceUrl}</p>
               )}
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={handleTestServiceNow}
-              disabled={testingConnection}
-              className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-2"
-            >
-              {testingConnection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4 text-blue-400" />}
-              <span>Test ServiceNow Connection</span>
-            </button>
-
-            <button
-              onClick={handleSaveSettings}
-              disabled={savingSettings}
-              className="flex-1 py-2 bg-accent hover:bg-accentHover text-white text-xs font-bold rounded-xl shadow-glowBlue transition-all flex items-center justify-center space-x-2"
-            >
-              {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              <span>Save Configuration</span>
-            </button>
-          </div>
+          {/* Single save-and-test button */}
+          <button
+            onClick={handleSaveAndTestServiceNow}
+            disabled={testingConnection || savingSettings}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-xs font-bold rounded-xl shadow transition-all flex items-center justify-center gap-2"
+          >
+            {(testingConnection || savingSettings) ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+            <span>
+              {(testingConnection || savingSettings) ? 'Saving & Verifying Connection...' : '💾 Save & Test Connection'}
+            </span>
+          </button>
+          <p className="text-[10px] text-slate-500 text-center -mt-2">
+            Saves credentials to the database and tests the connection in one step. All application features will use the new instance immediately.
+          </p>
 
           {/* Model Context Protocol (MCP) Tool Suite */}
           <div className="pt-4 border-t border-slate-800 space-y-3">
@@ -1566,12 +1601,13 @@ export default function AdminSettingsPage() {
                 <span className="text-xs font-bold text-white">Model Context Protocol (MCP) Tool Suite</span>
               </div>
               <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
-                8 Tools Active (Stdio & HTTP)
+                8 Tools Active (Stdio &amp; HTTP)
               </span>
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Standard JSON-RPC 2.0 MCP interface connected to ServiceNow. Autonomous agents and AI Copilots can dynamically query, create, and update incidents, search KBs, and correlate change requests.
+              <span className="text-blue-400 font-semibold"> The MCP server reads credentials from the same database — changing them above updates MCP automatically.</span>
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[10px]">

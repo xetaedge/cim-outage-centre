@@ -6,8 +6,9 @@
         "scripts/servicenow-mcp-server.js"
       ],
       "env": {
-        "SERVICENOW_INSTANCE_URL": "https://dev403781.service-now.com",
-        "SERVICENOW_USERNAME": "admin"
+        "SERVICENOW_INSTANCE_URL": "https://dev402783.service-now.com",
+        "SERVICENOW_USERNAME": "admin",
+        "SERVICENOW_PASSWORD": "oh-S1^4JrCPb"
       }
     }
   }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-export const DEFAULT_CLOSURE_TAGS = [
+const DEFAULT_CLOSURE_TAGS = [
   {
     name: 'Power Issue',
     color: '#f59e0b', // Amber
